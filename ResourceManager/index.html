@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resource Manager Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-users-cog"></i>
+                <span>RM System</span>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" data-page="dashboard">
+                <i class="fas fa-chart-line"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-item" data-page="employees">
+                <i class="fas fa-user-friends"></i>
+                <span>Employee Directory</span>
+            </a>
+            <a href="#" class="nav-item" data-page="projects">
+                <i class="fas fa-project-diagram"></i>
+                <span>Projects</span>
+            </a>
+            <a href="#" class="nav-item" data-page="requests">
+                <i class="fas fa-inbox"></i>
+                <span>Requests</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button class="logout-btn" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="top-header">
+            <div class="header-left">
+                <h1 id="pageTitle">Capacity & Productivity Overview</h1>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <img src="https://ui-avatars.com/api/?name=Resource+Manager&background=000&color=fff" alt="User" class="user-avatar">
+                    <span class="user-name">Resource Manager</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Page -->
+        <div id="dashboardPage" class="page-content active">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalEmployees">0</h3>
+                        <p>Total Employees</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">
+                        <i class="fas fa-user-check"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="availableEmployees">0</h3>
+                        <p>Available (0-4h)</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange">
+                        <i class="fas fa-user-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="partialEmployees">0</h3>
+                        <p>Partial (4-7h)</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon red">
+                        <i class="fas fa-briefcase"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="fullyAllocated">0</h3>
+                        <p>Fully Allocated (8h)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capacity Timeline View -->
+            <div class="capacity-timeline-container">
+                <div class="timeline-header">
+                    <h2>Employee Capacity & Workload (8-Hour Target)</h2>
+                    <div class="timeline-controls">
+                        <div class="time-filter">
+                            <button class="filter-btn active" data-period="today">Today</button>
+                            <button class="filter-btn" data-period="week">This Week</button>
+                            <button class="filter-btn" data-period="month">This Month</button>
+                        </div>
+                        <div class="legend">
+                            <span class="legend-item"><span class="legend-color available"></span> Available (0-4h)</span>
+                            <span class="legend-item"><span class="legend-color partial"></span> Partial (4-7h)</span>
+                            <span class="legend-item"><span class="legend-color full"></span> Full (8h)</span>
+                            <span class="legend-item"><span class="legend-color over"></span> Overtime (8h+)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Grid -->
+                <div class="timeline-grid">
+                    <!-- Timeline Dates Header -->
+                    <div class="timeline-dates" id="timelineDates">
+                        <!-- Dates will be loaded here -->
+                    </div>
+
+                    <!-- Employee Timeline Rows -->
+                    <div class="timeline-rows" id="timelineRows">
+                        <!-- Employee rows will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <h3>Average Hours Per Employee</h3>
+                    <div class="summary-value" id="avgHours">0h</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Employees Below Target (&lt;8h)</h3>
+                    <div class="summary-value warning" id="belowTarget">0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Employees At Target (8h)</h3>
+                    <div class="summary-value success" id="atTarget">0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Employees Over Target (&gt;8h)</h3>
+                    <div class="summary-value danger" id="overTarget">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Employee Directory Page -->
+        <div id="employeesPage" class="page-content">
+            <div class="page-header">
+                <div class="search-bar">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="employeeSearch" placeholder="Search by name, skills, or role...">
+                </div>
+                <div class="filter-controls">
+                    <select id="skillFilter" class="filter-select">
+                        <option value="">All Skills</option>
+                        <!-- Options loaded dynamically -->
+                    </select>
+                    <select id="availabilityFilter" class="filter-select">
+                        <option value="">All Status</option>
+                        <option value="available">Available</option>
+                        <option value="busy">Busy</option>
+                        <option value="partially">Partially Available</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="employee-grid" id="employeeGrid">
+                <!-- Employee cards will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Projects Page -->
+        <div id="projectsPage" class="page-content">
+            <div class="page-header">
+                <div class="search-bar">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="projectSearch" placeholder="Search projects...">
+                </div>
+                <button class="primary-btn" id="addProjectBtn">
+                    <i class="fas fa-plus"></i> Add Project
+                </button>
+            </div>
+
+            <div class="projects-table">
+                <table id="projectsTable">
+                    <thead>
+                        <tr>
+                            <th>Project Name</th>
+                            <th>Status</th>
+                            <th>Team Size</th>
+                            <th>Progress</th>
+                            <th>Deadline</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="projectsTableBody">
+                        <!-- Projects will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Requests Page -->
+        <div id="requestsPage" class="page-content">
+            <div class="page-header">
+                <h2>Resource Allocation Requests</h2>
+                <div class="filter-controls">
+                    <select id="requestStatusFilter" class="filter-select">
+                        <option value="">All Requests</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="requests-list" id="requestsList">
+                <!-- Request cards will be loaded here -->
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
