@@ -144,7 +144,7 @@
         </div>
     </div>
 
-    <!-- EDIT PROJECT & ASSIGN TEAM MODAL -->
+    <!-- EDIT PROJECT MODAL -->
     <div class="modal-overlay" id="editProjectModal">
         <div class="modal-box modal-box-large">
             <div class="modal-header">
@@ -168,7 +168,7 @@
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Status:</span>
-                            <span class="meta-value" id="modalProjectStatus">-</span>
+                            <div class="meta-value" id="modalProjectStatus">-</div>
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Deadline:</span>
@@ -183,17 +183,43 @@
                     </div>
                 </div>
 
-                <!-- Recommended Employees Section -->
+                 <!-- Employees Section -->
                 <div class="recommendations-section">
                     <div class="section-header">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <i class="fas fa-robot" style="color: #4A90E2; font-size: 20px;"></i>
-                            <h3>Recommended Employees</h3>
+                            <i class="fas fa-users" style="color: #4A90E2; font-size: 20px;"></i>
+                            <h3>All Employees</h3>
                         </div>
-                        <div class="recommendation-badge" id="recommendationCount">0</div>
+                        <div class="recommendation-badge" id="employeeCount">0</div>
                     </div>
-                    <div class="recommendations-list" id="recommendationsList">
-                        <!-- Recommendations loaded dynamically -->
+                    
+                    <!-- Filter Section -->
+                    <div class="filter-section">
+                        <div class="filter-controls">
+                            <div class="filter-group">
+                                <label class="filter-label">Search Employee</label>
+                                <input 
+                                    type="text" 
+                                    id="employeeSearchFilter" 
+                                    class="filter-input" 
+                                    placeholder="Search by name, role, or skills..."
+                                >
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Availability</label>
+                                <select id="availabilityFilter" class="filter-select">
+                                    <option value="all">All Employees</option>
+                                    <option value="available">Available (0-4h)</option>
+                                    <option value="partial">Partial (4-7h)</option>
+                                    <option value="full">Full (8h)</option>
+                                    <option value="over">Overtime (10h)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="recommendations-list" id="employeesList">
+                        <!-- Employees loaded dynamically -->
                     </div>
                 </div>
             </div>
@@ -205,7 +231,7 @@
                     <div class="modal-footer-buttons">
                         <button class="btn-secondary" id="cancelEditModal">Cancel</button>
                         <button class="btn-primary" id="saveProjectTeam">
-                            <i class="fas fa-check"></i> Assign Selected
+                            <i class="fas fa-user-check"></i> Assign Selected
                         </button>
                     </div>
                 </div>
@@ -242,4 +268,4 @@
 
     <script src="project.js"></script>
 </body>
-</html>
+</html
