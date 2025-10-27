@@ -106,7 +106,7 @@ class DataService {
     constructor() {
         this.projects = [];
         this.employees = [];
-        this.recommendationCounts = {};
+        this.assignableCounts = {};
         this.initializeMockData();
     }
 
@@ -263,12 +263,12 @@ class DataService {
             }
         ];
 
-        this.recommendationCounts = {
-            'PROJ001': 3,
-            'PROJ002': 2,
-            'PROJ003': 4,
-            'PROJ004': 1,
-            'PROJ005': 0
+        this.assignableCounts = {
+            'PROJ001': 8,
+            'PROJ002': 8,
+            'PROJ003': 8,
+            'PROJ004': 8,
+            'PROJ005': 8
         };
     }
 
@@ -288,8 +288,8 @@ class DataService {
         return Promise.resolve(this.employees.find(emp => emp.id === id));
     }
 
-    getRecommendationCount(projectId) {
-        return this.recommendationCounts[projectId] || 0;
+    getAssignableCount(projectId) {
+        return this.assignableCounts[projectId] || 0;
     }
 }
 
@@ -389,15 +389,15 @@ class UIManager {
 
         const editBtn = document.createElement('button');
         editBtn.className = 'icon-btn';
-        editBtn.title = 'Edit & Assign';
-        editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+        editBtn.title = 'Assign Team';
+        editBtn.innerHTML = '<i class="fas fa-user-plus"></i>';
         editBtn.onclick = () => app.editProject(proj.id);
 
-        const recommendationCount = this.dataService.getRecommendationCount(proj.id);
-        if (recommendationCount > 0) {
+        const assignableCount = this.dataService.getAssignableCount(proj.id);
+        if (assignableCount > 0) {
             const badge = document.createElement('span');
             badge.className = 'notification-badge';
-            badge.textContent = recommendationCount;
+            badge.textContent = assignableCount;
             editContainer.appendChild(editBtn);
             editContainer.appendChild(badge);
         } else {
@@ -426,18 +426,18 @@ class UIManager {
         container.appendChild(fragment);
     }
 
-    renderRecommendationsList(container, recommendations) {
+    renderEmployeesList(container, employees) {
         if (!container) return;
 
-        if (recommendations.length === 0) {
-            container.innerHTML = '<p style="text-align: center; color: #6C757D; padding: 20px;">No matching employees found</p>';
+        if (employees.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #6C757D; padding: 20px;">No employees found</p>';
             return;
         }
 
         const fragment = document.createDocumentFragment();
 
-        recommendations.forEach((emp, index) => {
-            const card = this.createRecommendationCard(emp, index);
+        employees.forEach((emp, index) => {
+            const card = this.createEmployeeCard(emp, index);
             fragment.appendChild(card);
         });
 
@@ -445,7 +445,7 @@ class UIManager {
         container.appendChild(fragment);
     }
 
-    createRecommendationCard(emp, index) {
+    createEmployeeCard(emp, index) {
         const card = document.createElement('div');
         card.className = 'recommendation-card';
         card.dataset.empId = emp.id;
@@ -476,7 +476,7 @@ class UIManager {
         const skillsDiv = document.createElement('div');
         skillsDiv.className = 'recommendation-skills';
         
-        emp.matchingSkills.forEach(skill => {
+        emp.skills.slice(0, 4).forEach(skill => {
             const skillSpan = document.createElement('span');
             skillSpan.className = 'skill-tag';
             skillSpan.textContent = skill;
@@ -487,15 +487,37 @@ class UIManager {
         details.appendChild(p);
         details.appendChild(skillsDiv);
 
-        const matchScore = document.createElement('span');
-        matchScore.className = 'match-score';
-        matchScore.textContent = `${emp.matchPercentage}% Match`;
+        const availabilityBadge = document.createElement('span');
+        availabilityBadge.className = 'match-score';
+        
+        const availabilityMap = {
+            'available': 'Available (0-4h)',
+            'partial': 'Partial (4-7h)',
+            'full': 'Full (8h)',
+            'over': 'Overtime (10h)'
+        };
+        
+        availabilityBadge.textContent = availabilityMap[emp.availability] || emp.availability;
+        
+        if (emp.availability === 'available') {
+            availabilityBadge.style.backgroundColor = '#E8F5E9';
+            availabilityBadge.style.color = '#2E7D32';
+        } else if (emp.availability === 'partial') {
+            availabilityBadge.style.backgroundColor = '#FFF3E0';
+            availabilityBadge.style.color = '#E65100';
+        } else if (emp.availability === 'full') {
+            availabilityBadge.style.backgroundColor = '#E3F2FD';
+            availabilityBadge.style.color = '#1565C0';
+        } else if (emp.availability === 'over') {
+            availabilityBadge.style.backgroundColor = '#FFEBEE';
+            availabilityBadge.style.color = '#C62828';
+        }
 
         card.appendChild(checkbox);
         card.appendChild(number);
         card.appendChild(avatar);
         card.appendChild(details);
-        card.appendChild(matchScore);
+        card.appendChild(availabilityBadge);
 
         return card;
     }
@@ -511,6 +533,7 @@ class ProjectApp {
         this.uiManager = new UIManager(this.dataService);
         
         this.debouncedSearch = debounce(() => this.filterProjects(), 300);
+        this.debouncedEmployeeFilter = debounce(() => this.filterEmployees(), 300);
     }
 
     async init() {
@@ -546,6 +569,18 @@ class ProjectApp {
         if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => ModalManager.hide('editProjectModal'));
         if (saveTeamBtn) saveTeamBtn.addEventListener('click', () => this.saveSelectedEmployees());
 
+        // Employee filters
+        const employeeSearchFilter = document.getElementById('employeeSearchFilter');
+        const availabilityFilter = document.getElementById('availabilityFilter');
+        
+        if (employeeSearchFilter) {
+            employeeSearchFilter.addEventListener('input', () => this.debouncedEmployeeFilter());
+        }
+        
+        if (availabilityFilter) {
+            availabilityFilter.addEventListener('change', () => this.filterEmployees());
+        }
+
         // Logout Modal
         const cancelLogoutBtn = document.getElementById('cancelLogout');
         const confirmLogoutBtn = document.getElementById('confirmLogout');
@@ -575,17 +610,28 @@ class ProjectApp {
 
     async filterProjects() {
         try {
-            const query = document.getElementById('projectSearch').value.toLowerCase();
+            const searchInput = document.getElementById('projectSearch');
+            if (!searchInput) return;
+            
+            const query = searchInput.value.toLowerCase().trim();
             const projects = await this.dataService.getAllProjects();
+            
+            if (!query) {
+                this.uiManager.renderProjects(projects);
+                return;
+            }
             
             const filtered = projects.filter(proj => 
                 proj.name.toLowerCase().includes(query) ||
-                proj.manager.toLowerCase().includes(query)
+                proj.manager.toLowerCase().includes(query) ||
+                proj.id.toLowerCase().includes(query) ||
+                proj.status.toLowerCase().includes(query)
             );
             
             this.uiManager.renderProjects(filtered);
         } catch (error) {
             console.error('Error filtering projects:', error);
+            MessageManager.error('Error searching projects');
         }
     }
 
@@ -600,7 +646,6 @@ class ProjectApp {
                 return;
             }
 
-            // Populate modal
             document.getElementById('viewProjectName').textContent = project.name;
             document.getElementById('viewProjectId').textContent = project.id;
             
@@ -616,7 +661,6 @@ class ProjectApp {
             const progressBar = document.getElementById('viewProjectProgressBar');
             progressBar.style.width = `${project.progress}%`;
 
-            // Populate skills
             const skillsContainer = document.getElementById('viewProjectSkills');
             this.uiManager.renderSkillsList(skillsContainer, project.skills);
 
@@ -633,6 +677,7 @@ class ProjectApp {
             ModalManager.showLoading();
             const project = await this.dataService.getProjectById(id);
             const employees = await this.dataService.getAllEmployees();
+            
             ModalManager.hideLoading();
             
             if (!project) {
@@ -640,8 +685,7 @@ class ProjectApp {
                 return;
             }
 
-            const recommendations = this.getEmployeeRecommendations(project, employees);
-            this.showEditProjectModal(project, recommendations);
+            this.showEditProjectModal(project, employees);
         } catch (error) {
             ModalManager.hideLoading();
             console.error('Error editing project:', error);
@@ -649,48 +693,10 @@ class ProjectApp {
         }
     }
 
-    getEmployeeRecommendations(project, employees) {
-        const filtered = employees
-            .filter(emp => {
-                const hasMatchingSkills = emp.skills.some(skill => 
-                    project.skills.some(projSkill => 
-                        projSkill.toLowerCase().includes(skill.toLowerCase()) || 
-                        skill.toLowerCase().includes(projSkill.toLowerCase())
-                    )
-                );
-                return hasMatchingSkills;
-            })
-            .map(emp => {
-                const matchingSkills = emp.skills.filter(skill => 
-                    project.skills.some(projSkill => 
-                        projSkill.toLowerCase().includes(skill.toLowerCase()) || 
-                        skill.toLowerCase().includes(projSkill.toLowerCase())
-                    )
-                );
-                const matchPercentage = Math.round((matchingSkills.length / project.skills.length) * 100);
-                return { ...emp, matchingSkills, matchPercentage };
-            })
-            .sort((a, b) => b.matchPercentage - a.matchPercentage);
-        
-        if (filtered.length >= 3) {
-            return filtered.slice(0, 5);
-        } else {
-            const remaining = employees
-                .filter(emp => !filtered.find(f => f.id === emp.id))
-                .slice(0, 3 - filtered.length)
-                .map(emp => ({
-                    ...emp,
-                    matchingSkills: [],
-                    matchPercentage: 0
-                }));
-            return [...filtered, ...remaining];
-        }
-    }
-
-    showEditProjectModal(project, recommendations) {
+    showEditProjectModal(project, employees) {
         this.currentProjectId = project.id;
+        this.allEmployees = employees;
 
-        // Update modal header info
         document.getElementById('modalProjectName').textContent = project.name;
         document.getElementById('modalProjectId').textContent = project.id;
         document.getElementById('modalTeamSize').textContent = `${project.teamSize} members`;
@@ -704,24 +710,60 @@ class ProjectApp {
         
         document.getElementById('modalProjectDeadline').textContent = this.uiManager.formatDate(project.deadline);
         
-        // Render skills
         const skillsContainer = document.getElementById('modalRequiredSkills');
         this.uiManager.renderSkillsList(skillsContainer, project.skills);
 
-        // Render recommendations
-        document.getElementById('recommendationCount').textContent = recommendations.length;
-        const recList = document.getElementById('recommendationsList');
-        this.uiManager.renderRecommendationsList(recList, recommendations);
-        document.getElementById('totalCount').textContent = recommendations.length;
+        document.getElementById('employeeCount').textContent = employees.length;
+        
+        // Reset filters
+        const searchFilter = document.getElementById('employeeSearchFilter');
+        const availFilter = document.getElementById('availabilityFilter');
+        if (searchFilter) searchFilter.value = '';
+        if (availFilter) availFilter.value = 'all';
+        
+        // Render all employees
+        this.filterEmployees();
 
+        ModalManager.show('editProjectModal');
+    }
+
+    filterEmployees() {
+        if (!this.allEmployees) return;
+
+        const searchInput = document.getElementById('employeeSearchFilter');
+        const availFilter = document.getElementById('availabilityFilter');
+        
+        const searchQuery = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const availValue = availFilter ? availFilter.value : 'all';
+
+        let filtered = [...this.allEmployees];
+
+        // Filter by search
+        if (searchQuery) {
+            filtered = filtered.filter(emp => 
+                emp.name.toLowerCase().includes(searchQuery) ||
+                emp.role.toLowerCase().includes(searchQuery) ||
+                emp.skills.some(skill => skill.toLowerCase().includes(searchQuery))
+            );
+        }
+
+        // Filter by availability
+        if (availValue !== 'all') {
+            filtered = filtered.filter(emp => emp.availability === availValue);
+        }
+
+        const empList = document.getElementById('employeesList');
+        this.uiManager.renderEmployeesList(empList, filtered);
+        
+        document.getElementById('employeeCount').textContent = filtered.length;
+        document.getElementById('totalCount').textContent = filtered.length;
+        
         this.updateSelectionCount();
 
-        // Add checkbox listeners
+        // Re-add checkbox listeners
         document.querySelectorAll('.employee-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', () => this.updateSelectionCount());
         });
-
-        ModalManager.show('editProjectModal');
     }
 
     updateSelectionCount() {
@@ -746,7 +788,6 @@ class ProjectApp {
             ModalManager.hide('editProjectModal');
             ModalManager.showLoading();
             
-            // Simulate API call
             await new Promise(resolve => setTimeout(resolve, 1000));
             
             ModalManager.hideLoading();
@@ -770,8 +811,6 @@ class ProjectApp {
         setTimeout(() => {
             ModalManager.hideLoading();
             MessageManager.success('You have been logged out successfully.');
-            // Redirect to login page
-            // window.location.href = 'login.html';
         }, 1000);
     }
 }
