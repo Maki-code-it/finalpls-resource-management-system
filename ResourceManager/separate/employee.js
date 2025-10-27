@@ -59,14 +59,20 @@ class MessageManager {
             info: 'fa-info-circle'
         };
 
-        messageBox.innerHTML = `
-            <i class="fas ${iconMap[type]}"></i>
-            <span>${message}</span>
-            <button class="message-close"><i class="fas fa-times"></i></button>
-        `;
+        const icon = document.createElement('i');
+        icon.className = `fas ${iconMap[type]}`;
 
-        const closeBtn = messageBox.querySelector('.message-close');
+        const text = document.createElement('span');
+        text.textContent = message;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'message-close';
+        closeBtn.innerHTML = '<i class="fas fa-times"></i>';
         closeBtn.addEventListener('click', () => messageBox.remove());
+
+        messageBox.appendChild(icon);
+        messageBox.appendChild(text);
+        messageBox.appendChild(closeBtn);
 
         container.appendChild(messageBox);
 
@@ -98,12 +104,65 @@ class MessageManager {
 
 class DataService {
     constructor() {
-        this.employees = [];
         this.projects = [];
+        this.employees = [];
         this.initializeMockData();
     }
 
     initializeMockData() {
+        this.projects = [
+            {
+                id: 'PROJ001',
+                name: 'Project Alpha',
+                status: 'active',
+                teamSize: 5,
+                progress: 65,
+                deadline: '2025-12-15',
+                manager: 'Sarah Williams',
+                skills: ['Python', 'React', 'AWS']
+            },
+            {
+                id: 'PROJ002',
+                name: 'Project Beta',
+                status: 'active',
+                teamSize: 3,
+                progress: 45,
+                deadline: '2025-11-30',
+                manager: 'John Anderson',
+                skills: ['Figma', 'Adobe XD', 'UI Design']
+            },
+            {
+                id: 'PROJ003',
+                name: 'Project Gamma',
+                status: 'pending',
+                teamSize: 4,
+                progress: 20,
+                deadline: '2026-01-20',
+                manager: 'Lisa Chen',
+                skills: ['Java', 'Spring Boot', 'SQL']
+            },
+            {
+                id: 'PROJ004',
+                name: 'Project Delta',
+                status: 'active',
+                teamSize: 6,
+                progress: 80,
+                deadline: '2025-11-10',
+                manager: 'Mark Taylor',
+                skills: ['Angular', 'Node.js', 'MongoDB']
+            },
+            {
+                id: 'PROJ005',
+                name: 'Project Epsilon',
+                status: 'completed',
+                teamSize: 4,
+                progress: 100,
+                deadline: '2025-10-01',
+                manager: 'Sarah Williams',
+                skills: ['Docker', 'Kubernetes', 'AWS']
+            }
+        ];
+
         this.employees = [
             {
                 id: 'EMP001',
@@ -200,40 +259,16 @@ class DataService {
                 projects: ['Project Alpha'],
                 experience: '3 years',
                 avatar: 'https://ui-avatars.com/api/?name=Lisa+Anderson&background=D0021B&color=fff'
-            },
-            {
-                id: 'EMP009',
-                name: 'Chris Taylor',
-                role: 'Data Scientist',
-                department: 'Analytics',
-                skills: ['Python', 'Machine Learning', 'TensorFlow', 'SQL'],
-                availability: 'available',
-                workloadHours: 4,
-                projects: ['Project Gamma'],
-                experience: '5 years',
-                avatar: 'https://ui-avatars.com/api/?name=Chris+Taylor&background=4A90E2&color=fff'
-            },
-            {
-                id: 'EMP010',
-                name: 'Amanda White',
-                role: 'Business Analyst',
-                department: 'Business',
-                skills: ['Requirements Analysis', 'Excel', 'PowerBI', 'Documentation'],
-                availability: 'partial',
-                workloadHours: 7,
-                projects: ['Project Delta'],
-                experience: '4 years',
-                avatar: 'https://ui-avatars.com/api/?name=Amanda+White&background=7ED321&color=fff'
             }
         ];
+    }
 
-        this.projects = [
-            { id: 'PROJ001', name: 'Project Alpha', status: 'active' },
-            { id: 'PROJ002', name: 'Project Beta', status: 'active' },
-            { id: 'PROJ003', name: 'Project Gamma', status: 'pending' },
-            { id: 'PROJ004', name: 'Project Delta', status: 'active' },
-            { id: 'PROJ005', name: 'Project Epsilon', status: 'completed' }
-        ];
+    async getAllProjects() {
+        return Promise.resolve([...this.projects]);
+    }
+
+    async getProjectById(id) {
+        return Promise.resolve(this.projects.find(proj => proj.id === id));
     }
 
     async getAllEmployees() {
@@ -244,33 +279,12 @@ class DataService {
         return Promise.resolve(this.employees.find(emp => emp.id === id));
     }
 
-    async searchEmployees(query, filters = {}) {
-        const employees = await this.getAllEmployees();
-        return employees.filter(emp => {
-            const matchesQuery = !query || 
-                emp.name.toLowerCase().includes(query.toLowerCase()) ||
-                emp.role.toLowerCase().includes(query.toLowerCase()) ||
-                emp.skills.some(skill => skill.toLowerCase().includes(query.toLowerCase()));
-            
-            const matchesSkill = !filters.skill || emp.skills.includes(filters.skill);
-            
-            let matchesAvailability = true;
-            if (filters.availability) {
-                if (filters.availability === 'available') {
-                    matchesAvailability = emp.workloadHours >= 0 && emp.workloadHours <= 4;
-                } else if (filters.availability === 'busy') {
-                    matchesAvailability = emp.workloadHours >= 8;
-                } else if (filters.availability === 'partially') {
-                    matchesAvailability = emp.workloadHours > 4 && emp.workloadHours < 8;
-                }
-            }
-            
-            return matchesQuery && matchesSkill && matchesAvailability;
+    getAllUniqueSkills() {
+        const skillsSet = new Set();
+        this.employees.forEach(emp => {
+            emp.skills.forEach(skill => skillsSet.add(skill));
         });
-    }
-
-    async getAllProjects() {
-        return Promise.resolve([...this.projects]);
+        return Array.from(skillsSet).sort();
     }
 }
 
@@ -279,29 +293,17 @@ class DataService {
 // ============================================
 
 class UIManager {
-    constructor() {}
-
-    getWorkloadStatus(hours) {
-        if (hours === 0 || hours <= 4) return 'available';
-        if (hours > 4 && hours < 8) return 'partial';
-        if (hours === 8) return 'full';
-        return 'over';
-    }
-
-    formatWorkloadStatus(hours) {
-        if (hours === 0 || hours <= 4) return 'Available (0-4h)';
-        if (hours > 4 && hours < 8) return 'Partial (4-7h)';
-        if (hours === 8) return 'Full (8h)';
-        return `Overtime (${hours}h)`;
+    constructor(dataService) {
+        this.dataService = dataService;
     }
 
     renderEmployees(employees) {
-        const container = document.getElementById('employeeGrid');
+        const grid = document.getElementById('employeeGrid');
         
-        if (!container) return;
+        if (!grid) return;
 
         if (employees.length === 0) {
-            container.innerHTML = '<p style="text-align: center; color: #6C757D; grid-column: 1 / -1;">No employees found</p>';
+            grid.innerHTML = '<p style="text-align: center; color: #6C757D; padding: 40px; grid-column: 1 / -1;">No employees found</p>';
             return;
         }
 
@@ -312,28 +314,16 @@ class UIManager {
             fragment.appendChild(card);
         });
 
-        container.innerHTML = '';
-        container.appendChild(fragment);
+        grid.innerHTML = '';
+        grid.appendChild(fragment);
     }
 
     createEmployeeCard(emp) {
         const card = document.createElement('div');
         card.className = 'employee-card';
-        card.dataset.id = emp.id;
+        card.dataset.empId = emp.id;
 
-        const header = this.createEmployeeHeader(emp);
-        card.appendChild(header);
-
-        const skills = this.createEmployeeSkills(emp);
-        card.appendChild(skills);
-
-        const actions = this.createEmployeeActions(emp);
-        card.appendChild(actions);
-
-        return card;
-    }
-
-    createEmployeeHeader(emp) {
+        // Employee Header
         const header = document.createElement('div');
         header.className = 'employee-header';
 
@@ -345,116 +335,142 @@ class UIManager {
         const info = document.createElement('div');
         info.className = 'employee-info';
 
-        const h3 = document.createElement('h3');
-        h3.textContent = emp.name;
+        const name = document.createElement('h3');
+        name.textContent = emp.name;
 
-        const role = document.createElement('p');
+        const role = document.createElement('div');
         role.className = 'employee-role';
         role.textContent = emp.role;
 
-        const statusClass = this.getWorkloadStatus(emp.workloadHours);
-        const statusText = this.formatWorkloadStatus(emp.workloadHours);
-        
         const statusBadge = document.createElement('span');
-        statusBadge.className = `status-badge ${statusClass}`;
-        statusBadge.textContent = statusText;
+        statusBadge.className = `status-badge ${emp.availability}`;
+        statusBadge.textContent = this.getAvailabilityText(emp.availability);
 
-        info.appendChild(h3);
+        info.appendChild(name);
         info.appendChild(role);
         info.appendChild(statusBadge);
 
         header.appendChild(avatar);
         header.appendChild(info);
 
-        return header;
-    }
+        // Employee Skills
+        const skillsSection = document.createElement('div');
+        skillsSection.className = 'employee-skills';
 
-    createEmployeeSkills(emp) {
-        const skillsContainer = document.createElement('div');
-        skillsContainer.className = 'employee-skills';
-
-        const h4 = document.createElement('h4');
-        h4.textContent = 'Skills';
+        const skillsTitle = document.createElement('h4');
+        skillsTitle.textContent = 'Skills';
 
         const skillsList = document.createElement('div');
         skillsList.className = 'skills-list';
 
-        const skillsToShow = emp.skills.slice(0, 4);
-        skillsToShow.forEach(skill => {
+        emp.skills.forEach(skill => {
             const skillTag = document.createElement('span');
             skillTag.className = 'skill-tag';
             skillTag.textContent = skill;
             skillsList.appendChild(skillTag);
         });
 
-        skillsContainer.appendChild(h4);
-        skillsContainer.appendChild(skillsList);
+        skillsSection.appendChild(skillsTitle);
+        skillsSection.appendChild(skillsList);
 
-        return skillsContainer;
-    }
-
-    createEmployeeActions(emp) {
+        // Employee Actions
         const actions = document.createElement('div');
         actions.className = 'employee-actions';
 
         const viewBtn = document.createElement('button');
-        viewBtn.className = 'btn-secondary';
+        viewBtn.className = 'btn-primary';
         viewBtn.innerHTML = '<i class="fas fa-eye"></i> View Profile';
-        viewBtn.onclick = () => app.viewEmployeeProfile(emp.id);
+        viewBtn.onclick = () => app.viewEmployee(emp.id);
 
         const assignBtn = document.createElement('button');
-        assignBtn.className = 'btn-primary';
+        assignBtn.className = 'btn-secondary';
         assignBtn.innerHTML = '<i class="fas fa-plus"></i> Assign';
         assignBtn.onclick = () => app.assignEmployee(emp.id);
 
         actions.appendChild(viewBtn);
         actions.appendChild(assignBtn);
 
-        return actions;
+        // Assemble card
+        card.appendChild(header);
+        card.appendChild(skillsSection);
+        card.appendChild(actions);
+
+        return card;
     }
 
-    populateSkillFilter(employees) {
-        const skillFilter = document.getElementById('skillFilter');
-        
-        if (!skillFilter) return;
+    getAvailabilityText(availability) {
+        const map = {
+            'available': 'Available',
+            'partial': 'Partially Available',
+            'full': 'Busy',
+            'over': 'Overloaded'
+        };
+        return map[availability] || availability;
+    }
 
-        const allSkills = [...new Set(employees.flatMap(emp => emp.skills))].sort();
-        
-        const fragment = document.createDocumentFragment();
-        
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = 'All Skills';
-        fragment.appendChild(defaultOption);
+    populateSkillsDropdown(dropdown, skills) {
+        if (!dropdown) return;
 
-        allSkills.forEach(skill => {
+        dropdown.innerHTML = '<option value="">All Skills</option>';
+        
+        skills.forEach(skill => {
             const option = document.createElement('option');
             option.value = skill;
             option.textContent = skill;
-            fragment.appendChild(option);
+            dropdown.appendChild(option);
+        });
+    }
+
+    populateProjectsDropdown(dropdown, projects) {
+        if (!dropdown) return;
+
+        dropdown.innerHTML = '<option value="">-- Select a project --</option>';
+        
+        projects.filter(p => p.status === 'active' || p.status === 'pending').forEach(proj => {
+            const option = document.createElement('option');
+            option.value = proj.id;
+            option.textContent = `${proj.name} (${proj.status})`;
+            dropdown.appendChild(option);
+        });
+    }
+
+    renderSkillsList(container, skills) {
+        if (!container) return;
+
+        const fragment = document.createDocumentFragment();
+        
+        skills.forEach(skill => {
+            const span = document.createElement('span');
+            span.className = 'skill-badge';
+            span.textContent = skill;
+            fragment.appendChild(span);
         });
 
-        skillFilter.innerHTML = '';
-        skillFilter.appendChild(fragment);
+        container.innerHTML = '';
+        container.appendChild(fragment);
     }
 }
 
 // ============================================
-// EMPLOYEE DIRECTORY APP
+// EMPLOYEE APP
 // ============================================
 
-class EmployeeDirectoryApp {
+class EmployeeApp {
     constructor() {
         this.dataService = new DataService();
-        this.uiManager = new UIManager();
-        this.currentAssignEmployee = null;
+        this.uiManager = new UIManager(this.dataService);
         
-        this.debouncedFilter = debounce(() => this.filterEmployees(), 300);
+        this.debouncedSearch = debounce(() => this.filterEmployees(), 300);
+        
+        this.currentEmployeeId = null;
+        this.allEmployees = [];
     }
 
     async init() {
         this.setupEventListeners();
         await this.loadEmployees();
+        await this.loadSkillsFilter();
+        await this.loadProjectsForAssignment();
     }
 
     setupEventListeners() {
@@ -467,7 +483,7 @@ class EmployeeDirectoryApp {
         // Search with debounce
         const empSearch = document.getElementById('employeeSearch');
         if (empSearch) {
-            empSearch.addEventListener('input', () => this.debouncedFilter());
+            empSearch.addEventListener('input', () => this.debouncedSearch());
         }
 
         // Filters
@@ -475,16 +491,17 @@ class EmployeeDirectoryApp {
         const availFilter = document.getElementById('availabilityFilter');
         
         if (skillFilter) {
-            skillFilter.addEventListener('change', () => this.debouncedFilter());
+            skillFilter.addEventListener('change', () => this.filterEmployees());
         }
         
         if (availFilter) {
-            availFilter.addEventListener('change', () => this.debouncedFilter());
+            availFilter.addEventListener('change', () => this.filterEmployees());
         }
 
         // View Employee Modal
         const closeViewBtn = document.getElementById('closeViewModal');
         const closeProfileBtn = document.getElementById('closeProfileBtn');
+        
         if (closeViewBtn) closeViewBtn.addEventListener('click', () => ModalManager.hide('viewEmployeeModal'));
         if (closeProfileBtn) closeProfileBtn.addEventListener('click', () => ModalManager.hide('viewEmployeeModal'));
 
@@ -495,13 +512,20 @@ class EmployeeDirectoryApp {
         
         if (closeAssignBtn) closeAssignBtn.addEventListener('click', () => ModalManager.hide('assignEmployeeModal'));
         if (cancelAssignBtn) cancelAssignBtn.addEventListener('click', () => ModalManager.hide('assignEmployeeModal'));
-        if (submitAssignBtn) submitAssignBtn.addEventListener('click', () => this.handleAssignSubmit());
+        if (submitAssignBtn) submitAssignBtn.addEventListener('click', () => this.submitAssignment());
 
         // Busy Employee Modal
         const cancelBusyBtn = document.getElementById('cancelBusyAssign');
         const proceedBusyBtn = document.getElementById('proceedBusyAssign');
-        if (cancelBusyBtn) cancelBusyBtn.addEventListener('click', () => ModalManager.hide('busyEmployeeModal'));
-        if (proceedBusyBtn) proceedBusyBtn.addEventListener('click', () => this.proceedWithBusyAssignment());
+        
+        if (cancelBusyBtn) cancelBusyBtn.addEventListener('click', () => {
+            ModalManager.hide('busyEmployeeModal');
+            ModalManager.show('assignEmployeeModal');
+        });
+        if (proceedBusyBtn) proceedBusyBtn.addEventListener('click', () => {
+            ModalManager.hide('busyEmployeeModal');
+            this.submitAssignment(true);
+        });
 
         // Logout Modal
         const cancelLogoutBtn = document.getElementById('cancelLogout');
@@ -518,42 +542,80 @@ class EmployeeDirectoryApp {
                 }
             });
         });
-
-        // Form submission
-        const assignForm = document.getElementById('assignEmployeeForm');
-        if (assignForm) {
-            assignForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleAssignSubmit();
-            });
-        }
     }
 
     async loadEmployees() {
         try {
-            const employees = await this.dataService.getAllEmployees();
-            this.uiManager.renderEmployees(employees);
-            this.uiManager.populateSkillFilter(employees);
+            this.allEmployees = await this.dataService.getAllEmployees();
+            this.uiManager.renderEmployees(this.allEmployees);
         } catch (error) {
             console.error('Error loading employees:', error);
             MessageManager.error('Failed to load employees');
         }
     }
 
-    async filterEmployees() {
+    async loadSkillsFilter() {
         try {
-            const query = document.getElementById('employeeSearch').value;
-            const skill = document.getElementById('skillFilter').value;
-            const availability = document.getElementById('availabilityFilter').value;
-            
-            const employees = await this.dataService.searchEmployees(query, { skill, availability });
-            this.uiManager.renderEmployees(employees);
+            const skills = this.dataService.getAllUniqueSkills();
+            const dropdown = document.getElementById('skillFilter');
+            this.uiManager.populateSkillsDropdown(dropdown, skills);
         } catch (error) {
-            console.error('Error filtering employees:', error);
+            console.error('Error loading skills:', error);
         }
     }
 
-    async viewEmployeeProfile(id) {
+    async loadProjectsForAssignment() {
+        try {
+            const projects = await this.dataService.getAllProjects();
+            const dropdown = document.getElementById('assignProjectSelect');
+            this.uiManager.populateProjectsDropdown(dropdown, projects);
+        } catch (error) {
+            console.error('Error loading projects:', error);
+        }
+    }
+
+    async filterEmployees() {
+        try {
+            const searchInput = document.getElementById('employeeSearch');
+            const skillFilter = document.getElementById('skillFilter');
+            const availFilter = document.getElementById('availabilityFilter');
+            
+            const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const selectedSkill = skillFilter ? skillFilter.value : '';
+            const selectedAvail = availFilter ? availFilter.value : '';
+            
+            let filtered = [...this.allEmployees];
+            
+            // Filter by search query
+            if (query) {
+                filtered = filtered.filter(emp => 
+                    emp.name.toLowerCase().includes(query) ||
+                    emp.role.toLowerCase().includes(query) ||
+                    emp.department.toLowerCase().includes(query) ||
+                    emp.skills.some(skill => skill.toLowerCase().includes(query))
+                );
+            }
+            
+            // Filter by skill
+            if (selectedSkill) {
+                filtered = filtered.filter(emp => 
+                    emp.skills.includes(selectedSkill)
+                );
+            }
+            
+            // Filter by availability
+            if (selectedAvail) {
+                filtered = filtered.filter(emp => emp.availability === selectedAvail);
+            }
+            
+            this.uiManager.renderEmployees(filtered);
+        } catch (error) {
+            console.error('Error filtering employees:', error);
+            MessageManager.error('Error filtering employees');
+        }
+    }
+
+    async viewEmployee(id) {
         try {
             ModalManager.showLoading();
             const employee = await this.dataService.getEmployeeById(id);
@@ -571,74 +633,38 @@ class EmployeeDirectoryApp {
             document.getElementById('viewEmpRole').textContent = employee.role;
             document.getElementById('viewEmpDepartment').textContent = employee.department;
             document.getElementById('viewEmpExperience').textContent = employee.experience;
-            document.getElementById('viewEmpWorkload').textContent = this.uiManager.formatWorkloadStatus(employee.workloadHours);
+            document.getElementById('viewEmpWorkload').textContent = `${employee.workloadHours} hours/week`;
             document.getElementById('viewEmpProjects').textContent = employee.projects.length > 0 ? employee.projects.join(', ') : 'None';
 
             // Populate skills
             const skillsContainer = document.getElementById('viewEmpSkills');
-            skillsContainer.innerHTML = '';
-            employee.skills.forEach(skill => {
-                const badge = document.createElement('span');
-                badge.className = 'skill-badge';
-                badge.textContent = skill;
-                skillsContainer.appendChild(badge);
-            });
+            this.uiManager.renderSkillsList(skillsContainer, employee.skills);
 
             ModalManager.show('viewEmployeeModal');
         } catch (error) {
             ModalManager.hideLoading();
-            console.error('Error viewing employee profile:', error);
-            MessageManager.error('Failed to load employee profile');
+            console.error('Error viewing employee:', error);
+            MessageManager.error('Failed to load employee details');
         }
     }
 
     async assignEmployee(id) {
         try {
+            ModalManager.showLoading();
             const employee = await this.dataService.getEmployeeById(id);
+            ModalManager.hideLoading();
             
             if (!employee) {
                 MessageManager.error('Employee not found');
                 return;
             }
 
-            // Check if employee is busy
-            if (employee.workloadHours >= 8) {
-                this.currentAssignEmployee = employee;
-                document.getElementById('busyEmployeeText').textContent = 
-                    `${employee.name} is currently fully allocated (${employee.workloadHours}h/week). Do you still want to proceed with assignment?`;
-                ModalManager.show('busyEmployeeModal');
-                return;
-            }
+            this.currentEmployeeId = id;
 
-            this.showAssignModal(employee);
-        } catch (error) {
-            console.error('Error assigning employee:', error);
-            MessageManager.error('Failed to load employee details');
-        }
-    }
-
-    async showAssignModal(employee) {
-        try {
-            this.currentAssignEmployee = employee;
-
-            // Populate employee info
+            // Populate modal
             document.getElementById('assignEmpAvatar').src = employee.avatar;
             document.getElementById('assignEmpName').textContent = employee.name;
             document.getElementById('assignEmpRole').textContent = employee.role;
-
-            // Load projects
-            const projects = await this.dataService.getAllProjects();
-            const activeProjects = projects.filter(p => p.status === 'active' || p.status === 'pending');
-            
-            const projectSelect = document.getElementById('assignProjectSelect');
-            projectSelect.innerHTML = '<option value="">-- Select a project --</option>';
-            
-            activeProjects.forEach(proj => {
-                const option = document.createElement('option');
-                option.value = proj.id;
-                option.textContent = proj.name;
-                projectSelect.appendChild(option);
-            });
 
             // Set default start date to today
             const today = new Date().toISOString().split('T')[0];
@@ -646,50 +672,67 @@ class EmployeeDirectoryApp {
 
             // Reset form
             document.getElementById('assignEmployeeForm').reset();
-            document.getElementById('assignProjectSelect').innerHTML = projectSelect.innerHTML;
             document.getElementById('assignStartDate').value = today;
-            document.getElementById('assignHours').value = 8;
 
             ModalManager.show('assignEmployeeModal');
         } catch (error) {
-            console.error('Error showing assign modal:', error);
-            MessageManager.error('Failed to load project list');
-        }
-    }
-
-    proceedWithBusyAssignment() {
-        ModalManager.hide('busyEmployeeModal');
-        if (this.currentAssignEmployee) {
-            this.showAssignModal(this.currentAssignEmployee);
-        }
-    }
-
-    async handleAssignSubmit() {
-        const projectId = document.getElementById('assignProjectSelect').value;
-        const hours = document.getElementById('assignHours').value;
-        const startDate = document.getElementById('assignStartDate').value;
-        const notes = document.getElementById('assignNotes').value;
-
-        if (!projectId) {
-            MessageManager.warning('Please select a project');
-            return;
-        }
-
-        if (!startDate) {
-            MessageManager.warning('Please select a start date');
-            return;
-        }
-
-        ModalManager.hide('assignEmployeeModal');
-        ModalManager.showLoading();
-
-        // Simulate API call
-        setTimeout(() => {
             ModalManager.hideLoading();
-            MessageManager.success(`${this.currentAssignEmployee.name} has been assigned successfully!`);
-            this.currentAssignEmployee = null;
-            this.loadEmployees();
-        }, 1000);
+            console.error('Error loading assignment modal:', error);
+            MessageManager.error('Failed to load employee details');
+        }
+    }
+
+    async submitAssignment(forceAssign = false) {
+        try {
+            const form = document.getElementById('assignEmployeeForm');
+            const projectId = document.getElementById('assignProjectSelect').value;
+            const hours = document.getElementById('assignHours').value;
+            const startDate = document.getElementById('assignStartDate').value;
+            const notes = document.getElementById('assignNotes').value;
+
+            if (!projectId) {
+                MessageManager.warning('Please select a project');
+                return;
+            }
+
+            if (!hours || hours < 1 || hours > 40) {
+                MessageManager.warning('Please enter valid hours (1-40)');
+                return;
+            }
+
+            if (!startDate) {
+                MessageManager.warning('Please select a start date');
+                return;
+            }
+
+            const employee = await this.dataService.getEmployeeById(this.currentEmployeeId);
+            
+            // Check if employee is busy
+            if (!forceAssign && (employee.availability === 'full' || employee.availability === 'over')) {
+                const busyText = document.getElementById('busyEmployeeText');
+                busyText.textContent = `${employee.name} is currently ${employee.availability === 'full' ? 'fully allocated' : 'overloaded'} with ${employee.workloadHours} hours of work. Assigning them to another project may impact their performance. Do you want to proceed anyway?`;
+                
+                ModalManager.hide('assignEmployeeModal');
+                ModalManager.show('busyEmployeeModal');
+                return;
+            }
+
+            ModalManager.hide('assignEmployeeModal');
+            ModalManager.showLoading();
+            
+            // Simulate API call
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            ModalManager.hideLoading();
+            MessageManager.success(`${employee.name} has been assigned to the project successfully!`);
+            
+            // Reload employees
+            await this.loadEmployees();
+        } catch (error) {
+            ModalManager.hideLoading();
+            console.error('Error submitting assignment:', error);
+            MessageManager.error('Failed to assign employee');
+        }
     }
 
     openLogoutModal() {
@@ -703,8 +746,6 @@ class EmployeeDirectoryApp {
         setTimeout(() => {
             ModalManager.hideLoading();
             MessageManager.success('You have been logged out successfully.');
-            // Redirect to login page
-            // window.location.href = 'login.html';
         }, 1000);
     }
 }
@@ -715,6 +756,6 @@ class EmployeeDirectoryApp {
 
 let app;
 document.addEventListener('DOMContentLoaded', () => {
-    app = new EmployeeDirectoryApp();
+    app = new EmployeeApp();
     app.init();
 });
