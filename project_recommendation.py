@@ -134,10 +134,8 @@ def get_recommendations(project_id: int):
             lambda s: count_matches(s, project_row['required_skills'])
         )
 
-        # Compute weighted score: match_count × experience weight
+        # Compute weighted score
         candidates['score'] = candidates['match_count'] * EXP_WEIGHT.get(project_row['experience_level'].lower(), 1)
-
-        # Sort candidates by score descending
         candidates = candidates.sort_values(by='score', ascending=False)
 
         # Only consider candidates with at least 1 skill match
@@ -146,7 +144,8 @@ def get_recommendations(project_id: int):
         # Pick top N based on quantity_needed
         recommended = eligible_for_recommendation.head(project_row['quantity_needed'])
 
-        recommended_ids = recommended['employee_id'].tolist()
+        # Prepare list with both employee_id and numeric user_id
+        recommended_list = recommended[['employee_id','id']].rename(columns={'id':'user_id'}).to_dict(orient='records')
 
         # Debug log
         logger.info(
@@ -154,10 +153,10 @@ def get_recommendations(project_id: int):
             project_row['experience_level'],
             project_row['required_skills'],
             candidates[['employee_id','experience_level','skills','match_count','score']],
-            recommended_ids
+            recommended_list
         )
 
-        return recommended_ids
+        return recommended_list
 
     # Apply recommendation per project requirement row
     projects['recommended_employees'] = projects.apply(recommend_employees, axis=1)

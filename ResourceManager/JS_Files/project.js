@@ -15,22 +15,88 @@ function debounce(func, delay = 300) {
 // ============================================
 
 class ModalManager {
-    static show(modalId) {
+    static openModals = new Map(); // modalId → trigger element
+
+    // Show a modal
+    static show(modalId, triggerElement = null) {
         const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
+        if (!modal) return;
+
+        // Save the element that opened the modal
+        if (triggerElement) this.openModals.set(modalId, triggerElement);
+
+        // Make modal visible
+        modal.classList.add('active');
+        modal.removeAttribute('aria-hidden');
+        modal.inert = false;
+
+        // Prevent background scrolling
+        document.body.style.overflow = 'hidden';
+
+        // Focus first focusable element inside modal
+        const focusable = modal.querySelector(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable) focusable.focus();
+
+        // Trap focus inside modal
+        modal.addEventListener('keydown', this._trapFocus);
     }
 
+    // Hide a modal
     static hide(modalId) {
         const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('active');
-            document.body.style.overflow = '';
+        if (!modal) return;
+
+        // Remove focus trap
+        modal.removeEventListener('keydown', this._trapFocus);
+
+        // Move focus back to trigger
+        const trigger = this.openModals.get(modalId);
+        if (trigger) trigger.focus();
+        this.openModals.delete(modalId);
+
+        // Hide modal
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        modal.inert = true;
+
+        // Restore scrolling
+        document.body.style.overflow = '';
+    }
+
+    // Trap focus inside modal
+    static _trapFocus(e) {
+        if (e.key !== 'Tab') return;
+
+        const modal = e.currentTarget;
+        const focusable = Array.from(
+            modal.querySelectorAll(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            )
+        ).filter(el => !el.disabled);
+
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+            // Shift + Tab
+            if (document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            // Tab
+            if (document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
         }
     }
 
+    // Loading overlay helpers
     static showLoading() {
         this.show('loadingOverlay');
     }
@@ -39,6 +105,7 @@ class ModalManager {
         this.hide('loadingOverlay');
     }
 }
+
 
 // ============================================
 // MESSAGE UTILITIES
@@ -103,6 +170,10 @@ class MessageManager {
 // ============================================
 
 class DataService {
+    constructor() {
+        this.projects = [];          // store project team sizes
+        this.assignedEmployees = {}; // track assigned employees per project
+    }
     // Fetch all employees
     async getAllEmployees() {
         const { data, error } = await supabase
@@ -127,48 +198,46 @@ class DataService {
       
   
     // Fetch all approved resource requests (linked to projects)
-    async getAllProjects() {
-        // Start from resource_requests filtered by approved status
-        const { data, error } = await supabase
-          .from('resource_requests')
-          .select(`
-            project:projects(
-              id,
-              name,
-              status,
-              end_date,
-              project_requirements(quantity_needed)
-            )
-          `)
-          .eq('status', 'approved'); // filter requests at the DB level
-      
-        if (error) {
-          console.error("Error loading projects:", error);
-          throw error;
-        }
-      
-        // Extract unique projects and format for UI
-        const projectMap = new Map();
-      
-        (data || []).forEach(req => {
-          const proj = req.project;
-          if (!projectMap.has(proj.id)) {
+  async getAllProjects() {
+    const { data, error } = await supabase
+      .from('resource_requests')
+      .select(`
+        project:projects(
+          id,
+          name,
+          status,
+          end_date,
+          project_requirements(quantity_needed)
+        )
+      `)
+      .in('status', ['approved', 'fulfilled']); // include both approved and fulfilled
+
+    if (error) {
+      console.error("Error loading projects:", error);
+      throw error;
+    }
+
+    const projectMap = new Map();
+
+    (data || []).forEach(req => {
+        const proj = req.project;
+        if (!projectMap.has(proj.id)) {
             projectMap.set(proj.id, {
-              projectId: proj.id,
-              projectName: proj.name,
-              projectStatus: proj.status,
-              teamSize: (proj.project_requirements || []).reduce(
-                (sum, r) => sum + (r.quantity_needed || 0),
-                0
-              ),
-              deadline: proj.end_date
+                projectId: proj.id,
+                projectName: proj.name,
+                projectStatus: proj.status, // either approved or fulfilled
+                teamSize: (proj.project_requirements || []).reduce(
+                    (sum, r) => sum + (r.quantity_needed || 0),
+                    0
+                ),
+                deadline: proj.end_date
             });
-          }
-        });
-      
-        // Return as array
-        return Array.from(projectMap.values());
-      }
+        }
+    });
+
+    return Array.from(projectMap.values());
+}
+
       
       
       
@@ -214,12 +283,46 @@ class DataService {
       }
       
       
-      
+    // -----------------------------
+// Preload existing assignments
+// -----------------------------
+    async preloadAssignedEmployees(projectId) {
+        const { data, error } = await supabase
+            .from('project_assignments')
+            .select('employee_id') // <-- use employee_id
+            .eq('project_id', projectId);
+
+        if (error) {
+            console.warn("Failed to load existing assignments:", error);
+            this.assignedEmployees[projectId] = new Set();
+            return;
+        }
+
+        // Store assigned employee IDs as strings
+        this.assignedEmployees[projectId] = new Set(data.map(d => String(d.employee_id)));
+    }
+
+
   
     // Placeholder — can later compute remaining assignable slots
     getAssignableCount(projectId) {
-      return 0;
+        const assigned = this.assignedEmployees[projectId]?.size || 0;
+        const project = this.projects?.find(p => p.projectId === projectId);
+        if (!project) return 0;
+        return Math.max(project.teamSize - assigned, 0);
     }
+
+    async getActiveAssignments(userId) {
+        const { data, error } = await supabase
+          .from("project_assignments")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("status", "assigned");
+      
+        if (error) throw error;
+        return data.length;
+      }
+      
   }
   
 
@@ -307,41 +410,34 @@ class UIManager {
       }
       
 
-    createActionButtons(proj) {
+      createActionButtons(proj) {
         const div = document.createElement('div');
         div.className = 'action-buttons';
-
+    
         const viewBtn = document.createElement('button');
         viewBtn.className = 'icon-btn';
         viewBtn.title = 'View';
         viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
         viewBtn.onclick = () => app.viewProject(proj.projectId);
-
+    
         const editContainer = document.createElement('div');
         editContainer.className = 'action-btn-with-badge';
-
+    
         const editBtn = document.createElement('button');
         editBtn.className = 'icon-btn';
         editBtn.title = 'Assign Team';
         editBtn.innerHTML = '<i class="fas fa-user-plus"></i>';
         editBtn.onclick = () => app.editProject(proj.projectId);
+    
+        editContainer.appendChild(editBtn); // no badge
 
-        const assignableCount = this.dataService.getAssignableCount(proj.projectId);
-        if (assignableCount > 0) {
-            const badge = document.createElement('span');
-            badge.className = 'notification-badge';
-            badge.textContent = assignableCount;
-            editContainer.appendChild(editBtn);
-            editContainer.appendChild(badge);
-        } else {
-            editContainer.appendChild(editBtn);
-        }
-
+    
         div.appendChild(viewBtn);
         div.appendChild(editContainer);
-
+    
         return div;
     }
+    
 
     renderSkillsList(container, skills) {
         if (!container) return;
@@ -387,14 +483,28 @@ class UIManager {
     }
 
     createEmployeeCard(emp, index) {
+        // Helpful debug — keeps your console info (you asked not to remove debug).
+        console.log('DEBUG createEmployeeCard input:', emp);
+    
+        // --- normalize fields (handle both flattened and nested shapes) ---
+        const employeeId = emp.employee_id || emp.id || emp.empId || emp.employeeId || '';
+        const userId = (emp.users && emp.users.id) || emp.user_id || emp.userId || emp.userId || '';
+        const name = (emp.users && emp.users.name) || emp.name || emp.displayName || 'Unknown';
+        const role = emp.job_title || emp.role || emp.position || 'No Role';
+        const skills = Array.isArray(emp.skills) ? emp.skills : (emp.skill ? [emp.skill] : []);
+        const rawStatus = (emp.status || emp.availability || '').toString().trim();
+        const statusText = rawStatus ? (rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase()) : 'Unknown';
+    
+        // --- build card elements ---
         const card = document.createElement('div');
         card.className = 'recommendation-card';
-        card.dataset.empId = emp.id;
+        if (employeeId) card.dataset.empId = String(employeeId);
     
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'employee-checkbox';
-        checkbox.dataset.empId = emp.id;
+        checkbox.dataset.userId = String(userId || '');     // ensure string
+        checkbox.dataset.empId = String(employeeId || '');
     
         const number = document.createElement('span');
         number.className = 'employee-number';
@@ -403,67 +513,50 @@ class UIManager {
         const avatar = document.createElement('img');
         avatar.src = emp.avatar
             ? emp.avatar
-            : `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=random&color=fff`;
-        avatar.alt = emp.name || "Employee";
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
+        avatar.alt = name || "Employee";
         avatar.className = 'employee-avatar-circle';
     
         const details = document.createElement('div');
         details.className = 'recommendation-details';
     
         const h4 = document.createElement('h4');
-        h4.textContent = emp.name;
+        h4.textContent = name;
     
         const p = document.createElement('p');
-        p.textContent = emp.role;
+        p.textContent = role;
     
         const skillsDiv = document.createElement('div');
         skillsDiv.className = 'recommendation-skills';
-        
-        if (emp.skills && emp.skills.length > 0) {
-            emp.skills.slice(0, 4).forEach(skill => {
-                const skillSpan = document.createElement('span');
-                skillSpan.className = 'skill-tag';
-                skillSpan.textContent = skill;
-                skillsDiv.appendChild(skillSpan);
-            });
-        } else {
+        (skills.length ? skills : ["General"]).slice(0, 4).forEach(skill => {
             const skillSpan = document.createElement('span');
             skillSpan.className = 'skill-tag';
-            skillSpan.textContent = 'No skills';
+            skillSpan.textContent = skill;
             skillsDiv.appendChild(skillSpan);
-        }
-        
+        });
     
         details.appendChild(h4);
         details.appendChild(p);
         details.appendChild(skillsDiv);
     
+        // --- status badge (Available / Busy / Unknown) ---
         const availabilityBadge = document.createElement('span');
         availabilityBadge.className = 'match-score';
-        
-        const availabilityMap = {
-            'available': 'Available (0-4h)',
-            'partial': 'Partial (4-7h)',
-            'full': 'Full (8h)',
-            'over': 'Overtime (10h)'
-        };
-        
-        availabilityBadge.textContent = availabilityMap[emp.availability] || emp.availability;
-        
-        if (emp.availability === 'available') {
-            availabilityBadge.style.backgroundColor = '#E8F5E9';
-            availabilityBadge.style.color = '#2E7D32';
-        } else if (emp.availability === 'partial') {
-            availabilityBadge.style.backgroundColor = '#FFF3E0';
-            availabilityBadge.style.color = '#E65100';
-        } else if (emp.availability === 'full') {
-            availabilityBadge.style.backgroundColor = '#E3F2FD';
-            availabilityBadge.style.color = '#1565C0';
-        } else if (emp.availability === 'over') {
-            availabilityBadge.style.backgroundColor = '#FFEBEE';
-            availabilityBadge.style.color = '#C62828';
-        }
+        availabilityBadge.textContent = statusText;
     
+        // lowercase key for mapping
+        const key = statusText.toLowerCase();
+        const colorMap = {
+            'available': ['#E8F5E9', '#2E7D32'], // green bg, dark green text
+            'busy': ['#FFEBEE', '#B71C1C'],      // red bg, dark red text
+            'unknown': ['#E0E0E0', '#424242']    // gray
+        };
+    
+        const colors = colorMap[key] || colorMap['unknown'];
+        availabilityBadge.style.backgroundColor = colors[0];
+        availabilityBadge.style.color = colors[1];
+    
+        // --- assemble ---
         card.appendChild(checkbox);
         card.appendChild(number);
         card.appendChild(avatar);
@@ -472,6 +565,9 @@ class UIManager {
     
         return card;
     }
+    
+    
+    
     
 }
 
@@ -486,6 +582,9 @@ class ProjectApp {
         
         this.debouncedSearch = debounce(() => this.filterProjects(), 300);
         this.debouncedEmployeeFilter = debounce(() => this.filterEmployees(), 300);
+
+        this.assignedEmployees = {};
+        this.projects = []; 
     }
 
     async init() {
@@ -553,6 +652,14 @@ class ProjectApp {
     async loadProjects() {
         try {
             const projects = await this.dataService.getAllProjects();
+    
+            // Store projects in both DataService (for assignable count) and ProjectApp (for UI)
+            this.dataService.projects = projects.map(proj => ({
+                projectId: proj.projectId,
+                teamSize: proj.teamSize
+            }));
+    
+            this.projects = projects; // full project objects for UI
             this.uiManager.renderProjects(projects);
         } catch (error) {
             console.error('Error loading projects:', error);
@@ -560,6 +667,17 @@ class ProjectApp {
         }
     }
 
+    async getAssignedCount(projectId) {
+        const { data, error } = await supabase
+          .from('project_assignments')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('status', 'assigned');
+      
+        if (error) throw error;
+        return data.length; // number of assigned employees
+      }
+      
     async filterProjects() {
         try {
             const searchInput = document.getElementById('projectSearch');
@@ -642,23 +760,30 @@ class ProjectApp {
       
       
 
-      async editProject(id) {
+      async editProject(projectId) {
         try {
             ModalManager.showLoading();
     
-            // Fetch project & employees
+            // 1. Preload already assigned employees
+            await this.preloadAssignedEmployees(projectId);
+    
+            // 2. Fetch project details and all employees concurrently
             const [project, employees] = await Promise.all([
-                this.dataService.getProjectById(id),
+                this.dataService.getProjectById(projectId),
                 this.dataService.getAllEmployees()
             ]);
     
+            // 3. Fetch recommended employees from FastAPI
             let recommendedEmployees = [];
             try {
-                const response = await fetch(`http://127.0.0.1:8000/recommendations/${id}`);
-                const data = await response.json();
-                // Flatten recommended employee IDs from all requirement rows as strings
-                recommendedEmployees = data.recommendations.flatMap(r => r.recommended_employees.map(String));
-                console.log("Recommended Employees from API:", recommendedEmployees);
+                const res = await fetch(`http://127.0.0.1:8000/recommendations/${projectId}`);
+                const data = await res.json();
+                recommendedEmployees = data.recommendations.flatMap(r =>
+                    r.recommended_employees.map(emp => ({
+                        employee_id: emp.employee_id,
+                        user_id: emp.user_id
+                    }))
+                );
             } catch (err) {
                 console.warn("Failed to fetch recommendations:", err);
             }
@@ -666,139 +791,205 @@ class ProjectApp {
             ModalManager.hideLoading();
     
             if (!project) {
-                MessageManager.error('Project not found');
+                MessageManager.error("Project not found");
                 return;
             }
     
-            // Render modal with employees and recommendations
-            this.showEditProjectModal(project, employees, recommendedEmployees);
-        } catch (error) {
-            ModalManager.hideLoading();
-            console.error('Error editing project:', error);
-            MessageManager.error('Failed to load project details');
-        }
-    }
+            // 4. Store references for filtering & modal rendering
+            this.currentProjectId = project.id;
+            this.allEmployees = employees;
+            this.recommendedIds = recommendedEmployees.map(emp => emp.employee_id);
     
-    showEditProjectModal(project, employees, recommendedEmployees = []) {
-        this.currentProjectId = project.id;
-        this.allEmployees = employees;
-        this.recommendedIds = recommendedEmployees.map(String); // ensure string for comparison
-        this.showingAllEmployees = false;
-    
-        // ---- Basic project info ----
-        document.getElementById('modalProjectName').textContent = project.name || 'Untitled Project';
-        document.getElementById('modalProjectId').textContent = project.id;
-    
-        const totalNeeded = project.project_requirements
-            ? project.project_requirements.reduce((sum, req) => sum + (req.quantity_needed || 0), 0)
-            : 0;
-        this.currentProjectTotalNeeded = totalNeeded;
-        document.getElementById('modalTeamSize').textContent = `${totalNeeded} members`;
-    
-        // ---- Status & Deadline ----
-        const statusElement = document.getElementById('modalProjectStatus');
-        if (statusElement) {
-            statusElement.innerHTML = '';
-            const statusSpan = document.createElement('span');
-            statusSpan.className = `project-status ${project.status}`;
-            statusSpan.textContent = this.uiManager.capitalize(project.status);
-            statusElement.appendChild(statusSpan);
-        }
-    
-        let deadlineText = 'No deadline set';
-        if (project.end_date) {
-            const date = new Date(project.end_date);
-            if (!isNaN(date)) deadlineText = date.toLocaleDateString();
-        }
-        document.getElementById('modalProjectDeadline').textContent = deadlineText;
-    
-        // ---- Skills list ----
-        const skillsContainer = document.getElementById('modalRequiredSkills');
-        this.uiManager.renderSkillsList(skillsContainer, project.project_requirements || []);
-    
-        // ---- Employee count ----
-        document.getElementById('totalNeededCount').textContent = totalNeeded;
-        document.getElementById('selectedCount').textContent = 0;
-    
-        // ---- Reset filters ----
-        const searchFilter = document.getElementById('employeeSearchFilter');
-        const availFilter = document.getElementById('availabilityFilter');
-        if (searchFilter) searchFilter.value = '';
-        if (availFilter) availFilter.value = 'recommended';
-    
-        // ---- Render employees ----
-        this.filterEmployees();
-    
-        // Listen for toggle change
-        if (availFilter) {
-            availFilter.addEventListener('change', () => this.filterEmployees());
-        }
-    
-        ModalManager.show('editProjectModal');
-    }
-    
-    
-    
-    
-    filterEmployees() {
-        if (!this.allEmployees) return;
-    
-        const searchInput = document.getElementById('employeeSearchFilter');
-        const availFilter = document.getElementById('availabilityFilter');
-    
-        const searchQuery = searchInput ? searchInput.value.toLowerCase().trim() : '';
-        const availValue = availFilter ? availFilter.value : 'recommended';
-    
-        // Filter out RM/PM
-        let eligibleEmployees = this.allEmployees.filter(emp => {
-            const role = (emp.job_title || '').toLowerCase();
-            return role !== 'resource manager' && role !== 'project manager';
-        });
-    
-        let filtered = [];
-    
-        if (availValue === 'recommended') {
-            filtered = eligibleEmployees.filter(emp =>
-                this.recommendedIds.includes(String(emp.employee_id))
-            );
-        } else if (availValue === 'all') {
-            filtered = [...eligibleEmployees];
-        }
-    
-        // Apply search filter
-        if (searchQuery) {
-            filtered = filtered.filter(emp =>
-                (emp.users?.name || '').toLowerCase().includes(searchQuery) ||
-                (emp.job_title || '').toLowerCase().includes(searchQuery) ||
-                (emp.skills || []).some(skill => skill.toLowerCase().includes(searchQuery))
-            );
-        }
-    
-        // Transform for UI
-        const renderData = filtered.map((emp, i) => ({
-            id: emp.employee_id,
-            name: emp.users?.name || 'Unnamed',
-            role: emp.job_title || 'No role specified',
-            skills: emp.skills || ['General'],
-            availability: emp.status || 'available'
-        }));
-    
-        const empList = document.getElementById('employeesList');
-        this.uiManager.renderEmployeesList(empList, renderData);
-    
-        // Pre-check AI recommended employees
-        document.querySelectorAll('.employee-checkbox').forEach(cb => {
-            if (this.recommendedIds.includes(cb.dataset.empId)) {
-                cb.checked = true;
-                cb.parentElement.classList.add('recommended');
+            // 5. Store projects for badge calculation
+            if (!this.projects) this.projects = [];
+            const existing = this.projects.find(p => p.projectId === project.id);
+            if (!existing) {
+                const totalNeeded = project.project_requirements.reduce(
+                    (sum, r) => sum + (r.quantity_needed || 0),
+                    0
+                );
+                this.projects.push({ projectId: project.id, teamSize: totalNeeded });
             }
     
-            cb.addEventListener('change', () => this.updateSelectionCount());
-        });
+            // 6. Render modal content
+            this.showEditProjectModal(project);
     
-        document.getElementById('employeeCount').textContent = filtered.length;
-        this.updateSelectionCount();
+        } catch (error) {
+            ModalManager.hideLoading();
+            console.error("Error editing project:", error);
+            MessageManager.error("Failed to load project details");
+        }
     }
+    
+    showEditProjectModal(project) {
+        this.currentProjectTotalNeeded = project.project_requirements.reduce(
+            (sum, r) => sum + (r.quantity_needed || 0),
+            0
+        );
+    
+        document.getElementById("modalProjectName").textContent = project.name || "Untitled Project";
+        document.getElementById("modalProjectId").textContent = project.id;
+        document.getElementById("modalTeamSize").textContent = `${this.currentProjectTotalNeeded} members`;
+        document.getElementById("totalNeededCount").textContent = this.currentProjectTotalNeeded;
+        document.getElementById("selectedCount").textContent = 0;
+    
+        const statusEl = document.getElementById("modalProjectStatus");
+        if (statusEl) {
+            statusEl.innerHTML = `<span class="project-status ${project.status}">${this.uiManager.capitalize(project.status)}</span>`;
+        }
+    
+        const deadlineText = project.end_date ? new Date(project.end_date).toLocaleDateString() : "No deadline set";
+        document.getElementById("modalProjectDeadline").textContent = deadlineText;
+    
+        this.uiManager.renderSkillsList(
+            document.getElementById("modalRequiredSkills"),
+            project.project_requirements || []
+        );
+    
+        // Reset filters
+        const searchFilter = document.getElementById("employeeSearchFilter");
+        const availFilter = document.getElementById("availabilityFilter");
+        if (searchFilter) searchFilter.value = "";
+        if (availFilter) availFilter.value = "recommended";
+    
+        // Render employees list
+        this.filterEmployees();
+    
+        if (availFilter) {
+            availFilter.addEventListener("change", () => this.filterEmployees());
+        }
+    
+        ModalManager.show("editProjectModal");
+    }
+    
+    
+    
+    
+    
+// -----------------------------
+// Preload existing assignments
+// -----------------------------
+async preloadAssignedEmployees(projectId) {
+    const { data, error } = await supabase
+        .from('project_assignments')
+        .select('user_id')
+        .eq('project_id', projectId);
+
+    if (error) {
+        console.warn("Failed to load existing assignments:", error);
+        this.assignedEmployees[projectId] = new Set();
+        return;
+    }
+
+    this.assignedEmployees[projectId] = new Set(data.map(d => String(d.user_id)));
+}
+
+// -----------------------------
+// Compute remaining assignable slots
+// -----------------------------
+getAssignableCount(projectId) {
+    const assigned = this.assignedEmployees[projectId]?.size || 0;
+    const project = this.projects?.find(p => p.projectId === projectId);
+    if (!project) return 0;
+    return Math.max(project.teamSize - assigned, 0);
+}
+
+
+// -----------------------------
+// Edit Project Modal
+// -----------------------------
+
+
+// -----------------------------
+// Render Employee Checkboxes in Modal
+// -----------------------------
+filterEmployees() {
+    console.log("DEBUG: FastAPI recommendations:", this.recommendedIds);
+
+
+    if (!this.allEmployees) return;
+
+    const searchQuery = document.getElementById("employeeSearchFilter")?.value.toLowerCase().trim() || "";
+    const availValue = document.getElementById("availabilityFilter")?.value || "recommended";
+
+    // Exclude managers
+    let eligibleEmployees = this.allEmployees.filter(emp => {
+        const role = (emp.job_title || "").toLowerCase();
+        return role !== "resource manager" && role !== "project manager";
+    });
+
+    // Apply recommended / all filter
+    let filtered = availValue === "all"
+        ? [...eligibleEmployees]
+        : eligibleEmployees.filter(emp => this.recommendedIds.includes(emp.employee_id));
+
+    // Apply search filter
+    if (searchQuery) {
+        filtered = filtered.filter(emp =>
+            (emp.users?.name || "").toLowerCase().includes(searchQuery) ||
+            (emp.job_title || "").toLowerCase().includes(searchQuery) ||
+            (emp.skills || []).some(skill => skill.toLowerCase().includes(searchQuery))
+        );
+    }
+
+    // Prepare data for UI rendering
+    const renderData = filtered.map(emp => ({
+        id: emp.employee_id,
+        user_id: emp.users?.id,  // <-- add this
+        name: emp.users?.name || "Unnamed",
+        role: emp.job_title || "No role specified",
+        skills: emp.skills || ["General"],
+        availability: emp.status || "available"
+    }));
+
+    const empList = document.getElementById("employeesList");
+    this.uiManager.renderEmployeesList(empList, renderData);
+
+    // Highlight recommended and disable already assigned
+    // Highlight assigned / recommended
+    const assignedSet = this.assignedEmployees[this.currentProjectId] || new Set();
+    document.querySelectorAll(".employee-checkbox").forEach(cb => {
+        const userId = cb.dataset.userId;
+        const empId = cb.dataset.empId;
+    
+        // Find the employee object
+        const emp = this.allEmployees.find(e => e.employee_id == empId);
+    
+        // Already assigned
+        if ((this.assignedEmployees[this.currentProjectId] || new Set()).has(userId)) {
+            cb.checked = true;
+            cb.disabled = false; // assigned employees can still be unchecked if you want
+            cb.parentElement.classList.add("assigned");
+            cb.title = "Already assigned";
+        } 
+        // Recommended but not assigned
+        else if (this.recommendedIds.includes(empId)) {
+            cb.checked = false;
+            cb.parentElement.classList.add("recommended");
+        } 
+        // Normal state
+        else {
+            cb.checked = false;
+            cb.parentElement.classList.remove("assigned");
+            cb.parentElement.classList.remove("recommended");
+        }
+    
+        // Disable if busy
+        if (emp?.status?.toLowerCase() === "busy") {
+            cb.disabled = true;
+            cb.parentElement.classList.add("busy");
+            cb.title = "Employee is busy";
+        }
+    
+        cb.addEventListener("change", () => this.updateSelectionCount());
+    });
+    
+
+    this.updateSelectionCount();
+}
+
+
+
     
     
     
@@ -806,52 +997,294 @@ class ProjectApp {
     
 
     updateSelectionCount() {
+        const assignedSet = this.assignedEmployees[this.currentProjectId] || new Set();
         const checkboxes = document.querySelectorAll('.employee-checkbox');
-        const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+        const newlySelected = Array.from(checkboxes).filter(cb => cb.checked).length;
+        const totalSelected = assignedSet.size + newlySelected;
+        
         const selectedCountEl = document.getElementById('selectedCount');
         if (selectedCountEl) {
-            selectedCountEl.textContent = checkedCount;
+            selectedCountEl.textContent = totalSelected;
         }
     }
+
 
     async saveSelectedEmployees() {
         try {
-            const checkboxes = document.querySelectorAll('.employee-checkbox:checked');
-            const selectedEmployees = Array.from(checkboxes).map(cb => cb.dataset.empId);
-            
-            if (selectedEmployees.length === 0) {
-                MessageManager.warning('Please select at least one employee');
+            const checkboxes = document.querySelectorAll(".employee-checkbox");
+            const assignedSet = this.assignedEmployees[this.currentProjectId] || new Set();
+    
+            // -------------------------
+            // Get currently checked employee IDs
+            // -------------------------
+            const currentlyCheckedIds = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.dataset.empId);
+    
+            console.log("DEBUG currentlyCheckedIds:", currentlyCheckedIds);
+    
+            // -------------------------
+            // Map previously assigned user IDs → employee IDs
+            // -------------------------
+            const previouslyAssignedIds = Array.from(assignedSet).map(userId => {
+                const emp = this.allEmployees.find(e => e.users?.id == userId);
+                return emp?.employee_id;
+            }).filter(Boolean);
+    
+            console.log("DEBUG previouslyAssignedIds:", previouslyAssignedIds);
+    
+            // -------------------------
+            // Determine newly selected (to add) and unselected (to remove)
+            // -------------------------
+            const newlySelectedIds = currentlyCheckedIds.filter(id => !previouslyAssignedIds.includes(id));
+            const toRemoveIds = previouslyAssignedIds.filter(id => !currentlyCheckedIds.includes(id));
+    
+            console.log("DEBUG newlySelectedIds:", newlySelectedIds);
+            console.log("DEBUG toRemoveIds:", toRemoveIds);
+    
+            // -------------------------
+            // Map employee_id → user_id for DB operations
+            // -------------------------
+            const newlySelectedUserIds = newlySelectedIds.map(empId => {
+                const emp = this.allEmployees.find(e => e.employee_id === empId);
+                return emp?.users?.id || null;
+            }).filter(Boolean);
+    
+            const toRemoveUserIds = toRemoveIds.map(empId => {
+                const emp = this.allEmployees.find(e => e.employee_id === empId);
+                return emp?.users?.id || null;
+            }).filter(Boolean);
+    
+            console.log("DEBUG newlySelectedUserIds:", newlySelectedUserIds);
+            console.log("DEBUG toRemoveUserIds:", toRemoveUserIds);
+    
+            if (!newlySelectedUserIds.length && !toRemoveUserIds.length) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No changes',
+                    text: 'Please select or unselect at least one employee.'
+                });
                 return;
             }
-
-            ModalManager.hide('editProjectModal');
+    
+            // -------------------------
+            // Check team size for adding only
+            // -------------------------
+            const totalNeeded = this.projects.find(p => p.projectId === this.currentProjectId)?.teamSize || 0;
+            const currentlyAssignedCount = assignedSet.size;
+            const slotsLeft = totalNeeded - (currentlyAssignedCount - toRemoveUserIds.length);
+    
+            console.log("DEBUG totalNeeded:", totalNeeded);
+            console.log("DEBUG currentlyAssignedCount:", currentlyAssignedCount);
+            console.log("DEBUG slotsLeft:", slotsLeft);
+    
+            if (newlySelectedUserIds.length > slotsLeft) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Too many selections',
+                    text: `You can only assign ${slotsLeft} more employee(s) to this project.`
+                });
+                return;
+            }
+    
             ModalManager.showLoading();
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
+    
+            // -------------------------
+            // FRONTEND EXPERIENCE-LEVEL CHECK
+            // -------------------------
+            for (const userId of newlySelectedUserIds) {
+                try {
+                    // Get user’s experience level
+                    const { data: userDetail, error: detailError } = await supabase
+                        .from("user_details")
+                        .select("experience_level")
+                        .eq("user_id", userId)
+                        .single();
+    
+                    if (detailError) throw detailError;
+                    const expLevel = userDetail.experience_level;
+    
+                    // Count active assignments
+                    const { data: activeAssignments, error: activeError } = await supabase
+                        .from("project_assignments")
+                        .select("id")
+                        .eq("user_id", userId)
+                        .eq("status", "assigned");
+    
+                    if (activeError) throw activeError;
+                    const activeCount = activeAssignments.length;
+    
+                    // Determine max allowed
+                    let maxAllowed = 1;
+                    if (expLevel === "intermediate") maxAllowed = 2;
+                    else if (expLevel === "advanced") maxAllowed = 3;
+    
+                    console.log(`DEBUG user ${userId} expLevel=${expLevel}, activeCount=${activeCount}, maxAllowed=${maxAllowed}`);
+    
+                    if (activeCount >= maxAllowed) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Assignment limit reached',
+                            text: `User (experience: ${expLevel}) already has ${activeCount}/${maxAllowed} active project(s).`
+                        });
+                        continue; // Skip assigning this one
+                    }
+    
+                    // Proceed to assign only if below limit
+                    const { error: insertError } = await supabase
+                        .from("project_assignments")
+                        .insert([{
+                            project_id: Number(this.currentProjectId),
+                            user_id: Number(userId),
+                            status: 'assigned'
+                        }]);
+                    if (insertError) throw insertError;
+    
+                    assignedSet.add(String(userId));
+                    console.log("DEBUG Assigned user:", userId);
+                } catch (err) {
+                    console.error("DEBUG Error assigning user:", userId, err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Assignment Failed',
+                        text: `Failed to assign user ID ${userId}. Check console for details.`
+                    });
+                }
+            }
+    
+            // -------------------------
+            // Remove unassigned employees
+            // -------------------------
+            for (const userId of toRemoveUserIds) {
+                const { error } = await supabase
+                    .from("project_assignments")
+                    .delete()
+                    .match({
+                        project_id: Number(this.currentProjectId),
+                        user_id: Number(userId)
+                    });
+    
+                if (error) console.error("Failed to remove user_id", userId, error);
+                else {
+                    console.log("Removed user_id", userId);
+                    assignedSet.delete(String(userId));
+                }
+            }
+    
+            console.log("DEBUG Updated assignedSet:", Array.from(assignedSet));
+    
+            // -------------------------
+            // Update UI
+            // -------------------------
+            this.updateAssignedUI();
+    
             ModalManager.hideLoading();
-            MessageManager.success(`${selectedEmployees.length} employee(s) assigned to project successfully!`);
-            this.loadProjects();
-        } catch (error) {
+            ModalManager.hide("editProjectModal");
+    
+            Swal.fire({
+                icon: 'success',
+                title: 'Team Updated',
+                text: `Project team updated successfully!`
+            });
+    
+        } catch (err) {
             ModalManager.hideLoading();
-            console.error('Error saving project team:', error);
-            MessageManager.error('Failed to save project team');
+            ModalManager.hide("editProjectModal");
+            console.error("Error saving project team:", err);
+            Swal.fire({
+                icon: 'error',
+                title: 'Save Failed',
+                text: 'Failed to update project team. Check console for details.'
+            });
         }
     }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    updateAssignedUI() {
+        const checkboxes = document.querySelectorAll('.employee-checkbox');
+        const assignedSet = this.assignedEmployees[this.currentProjectId] || new Set();
+    
+        checkboxes.forEach(cb => {
+            const userId = String(cb.dataset.userId); // ensure string
+            const empId = cb.dataset.empId;
+    
+            if (assignedSet.has(userId)) {
+                cb.checked = true;
+                cb.disabled = false;
+                cb.parentElement.classList.add('assigned');
+                cb.parentElement.classList.remove('recommended');
+            } else if (this.recommendedIds.includes(empId)) {
+                cb.checked = false; // do NOT auto-check recommended
+                cb.parentElement.classList.remove('assigned');
+                cb.parentElement.classList.add('recommended');
+            } else {
+                cb.checked = false;
+                cb.parentElement.classList.remove('assigned');
+                cb.parentElement.classList.remove('recommended');
+            }
+        });
+    
+        // Update selected count
+        const selectedCountEl = document.getElementById('selectedCount');
+        if (selectedCountEl) {
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            selectedCountEl.textContent = checkedCount;
+        }
+    }
+    
+    
+    
 
     openLogoutModal() {
         ModalManager.show('logoutModal');
     }
 
     async handleLogout() {
-        ModalManager.hide('logoutModal');
-        ModalManager.showLoading();
-        
-        setTimeout(() => {
+        try {
+            // Hide the modal and show loading overlay
+            ModalManager.hide('logoutModal');
+            ModalManager.showLoading();
+    
+            // Sign out the user via Supabase
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+    
+            // Clear any local storage/session storage if used
+            localStorage.clear();
+            sessionStorage.clear();
+    
+            // Hide loading overlay
             ModalManager.hideLoading();
+    
+            // Optional: show a success message
             MessageManager.success('You have been logged out successfully.');
-        }, 1000);
+    
+            // Redirect to login page
+            window.location.href = '/login/HTML_Files/login.html'; // <-- change path if needed
+        } catch (err) {
+            ModalManager.hideLoading();
+            console.error('Logout failed:', err);
+            MessageManager.error('Logout failed. Please try again.');
+        }
     }
+    
 }
 
 // ============================================

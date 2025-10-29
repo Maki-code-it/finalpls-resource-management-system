@@ -740,14 +740,34 @@ class EmployeeApp {
     }
 
     async handleLogout() {
-        ModalManager.hide('logoutModal');
-        ModalManager.showLoading();
-        
-        setTimeout(() => {
+        try {
+            // Hide the modal and show loading overlay
+            ModalManager.hide('logoutModal');
+            ModalManager.showLoading();
+    
+            // Sign out the user via Supabase
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+    
+            // Clear any local storage/session storage if used
+            localStorage.clear();
+            sessionStorage.clear();
+    
+            // Hide loading overlay
             ModalManager.hideLoading();
+    
+            // Optional: show a success message
             MessageManager.success('You have been logged out successfully.');
-        }, 1000);
+    
+            // Redirect to login page
+            window.location.href = '/login/HTML_Files/login.html'; // <-- change path if needed
+        } catch (err) {
+            ModalManager.hideLoading();
+            console.error('Logout failed:', err);
+            MessageManager.error('Logout failed. Please try again.');
+        }
     }
+    
 }
 
 // ============================================
