@@ -1,6 +1,6 @@
-// ============================================
-// UTILITY FUNCTIONS
-// ============================================
+
+import { supabase } from "../../supabaseClient.js";
+
 
 function debounce(func, delay = 300) {
     let timeoutId;
@@ -99,109 +99,243 @@ class MessageManager {
 }
 
 // ============================================
-// DATA SERVICE (In-Memory Storage)
+// DATA SERVICE (Supabase Connected)
 // ============================================
 
 class DataService {
     constructor() {
-        this.requests = [];
-        this.initializeMockData();
+        this.currentUser = this.getCurrentUser();
     }
 
-    initializeMockData() {
-        this.requests = [
-            {
-                id: 'REQ001',
-                projectName: 'Project Zeta',
-                requester: 'Michael Scott',
-                department: 'Sales',
-                position: 'Frontend Developer',
-                skillsRequired: ['React', 'TypeScript', 'CSS'],
-                experience: 'Mid-level (3-5 years)',
-                quantity: 2,
-                priority: 'High',
-                startDate: '2025-11-15',
-                duration: '6 months',
-                status: 'pending',
-                submittedDate: '2025-10-20'
-            },
-            {
-                id: 'REQ002',
-                projectName: 'Project Omega',
-                requester: 'Dwight Schrute',
-                department: 'Operations',
-                position: 'Backend Developer',
-                skillsRequired: ['Python', 'Django', 'PostgreSQL'],
-                experience: 'Senior (5+ years)',
-                quantity: 1,
-                priority: 'Medium',
-                startDate: '2025-12-01',
-                duration: '4 months',
-                status: 'pending',
-                submittedDate: '2025-10-22'
-            },
-            {
-                id: 'REQ003',
-                projectName: 'Project Sigma',
-                requester: 'Pam Beesly',
-                department: 'Marketing',
-                position: 'UI/UX Designer',
-                skillsRequired: ['Figma', 'Adobe XD', 'User Research'],
-                experience: 'Junior (1-3 years)',
-                quantity: 1,
-                priority: 'Low',
-                startDate: '2025-11-25',
-                duration: '3 months',
-                status: 'approved',
-                submittedDate: '2025-10-18'
-            },
-            {
-                id: 'REQ004',
-                projectName: 'Project Theta',
-                requester: 'Jim Halpert',
-                department: 'Engineering',
-                position: 'DevOps Engineer',
-                skillsRequired: ['Docker', 'Kubernetes', 'AWS', 'CI/CD'],
-                experience: 'Senior (5+ years)',
-                quantity: 1,
-                priority: 'High',
-                startDate: '2025-11-20',
-                duration: '8 months',
-                status: 'pending',
-                submittedDate: '2025-10-21'
-            },
-            {
-                id: 'REQ005',
-                projectName: 'Project Lambda',
-                requester: 'Angela Martin',
-                department: 'Finance',
-                position: 'Data Analyst',
-                skillsRequired: ['SQL', 'Excel', 'PowerBI'],
-                experience: 'Mid-level (3-5 years)',
-                quantity: 2,
-                priority: 'Medium',
-                startDate: '2025-12-10',
-                duration: '5 months',
-                status: 'rejected',
-                submittedDate: '2025-10-19'
-            }
-        ];
+    getCurrentUser() {
+        const user = localStorage.getItem("loggedUser");
+        const parsedUser = user ? JSON.parse(user) : null;
+        console.log('Current user from localStorage:', parsedUser);
+        return parsedUser;
     }
 
     async getAllRequests() {
-        return Promise.resolve([...this.requests]);
+        try {
+            const { data, error } = await supabase
+                .from('resource_requests')
+                .select(`
+                    *,
+                    project:projects(
+                        id,
+                        name,
+                        description,
+                        priority,
+                        start_date,
+                        end_date
+                    ),
+                    requirement:project_requirements(
+                        id,
+                        experience_level,
+                        quantity_needed,
+                        required_skills
+                    ),
+                    requester:users!resource_requests_requested_by_fkey(
+                        id,
+                        name,
+                        email
+                    ),
+                    approver:users!resource_requests_approved_by_fkey(
+                        id,
+                        name
+                    )
+                `)
+                .order('requested_at', { ascending: false });
+
+            if (error) throw error;
+
+            // Transform data to match UI expectations
+            return data.map(req => ({
+                id: `REQ${String(req.id).padStart(3, '0')}`,
+                rawId: req.id,
+                projectName: req.project?.name || 'N/A',
+                projectId: req.project?.id,
+                requester: req.requester?.name || 'N/A',
+                requesterEmail: req.requester?.email || 'N/A',
+                department: 'N/A',
+                position: 'Developer',
+                skillsRequired: req.requirement?.required_skills || [],
+                experience: this.formatExperienceLevel(req.requirement?.experience_level),
+                quantity: req.requirement?.quantity_needed || 1,
+                priority: this.capitalize(req.project?.priority || 'medium'),
+                startDate: req.project?.start_date || null,
+                duration: this.calculateDuration(req.project?.start_date, req.project?.end_date),
+                status: req.status,
+                submittedDate: req.requested_at,
+                notes: req.notes,
+                approvedBy: req.approver?.name,
+                approvedAt: req.approved_at
+            }));
+        } catch (error) {
+            console.error('Error fetching requests:', error);
+            throw error;
+        }
     }
 
     async getRequestById(id) {
-        return Promise.resolve(this.requests.find(req => req.id === id));
+        try {
+            // Extract raw ID from formatted ID (REQ001 -> 1)
+            const rawId = typeof id === 'string' && id.startsWith('REQ') 
+                ? parseInt(id.replace('REQ', '')) 
+                : id;
+
+            const { data, error } = await supabase
+                .from('resource_requests')
+                .select(`
+                    *,
+                    project:projects(
+                        id,
+                        name,
+                        description,
+                        priority,
+                        start_date,
+                        end_date
+                    ),
+                    requirement:project_requirements(
+                        id,
+                        experience_level,
+                        quantity_needed,
+                        required_skills
+                    ),
+                    requester:users!resource_requests_requested_by_fkey(
+                        id,
+                        name,
+                        email
+                    ),
+                    approver:users!resource_requests_approved_by_fkey(
+                        id,
+                        name
+                    )
+                `)
+                .eq('id', rawId)
+                .single();
+
+            if (error) throw error;
+
+            return {
+                id: `REQ${String(data.id).padStart(3, '0')}`,
+                rawId: data.id,
+                projectName: data.project?.name || 'N/A',
+                projectId: data.project?.id,
+                requester: data.requester?.name || 'N/A',
+                requesterEmail: data.requester?.email || 'N/A',
+                department: 'N/A',
+                position: 'Developer',
+                skillsRequired: data.requirement?.required_skills || [],
+                experience: this.formatExperienceLevel(data.requirement?.experience_level),
+                quantity: data.requirement?.quantity_needed || 1,
+                priority: this.capitalize(data.project?.priority || 'medium'),
+                startDate: data.project?.start_date || null,
+                duration: this.calculateDuration(data.project?.start_date, data.project?.end_date),
+                status: data.status,
+                submittedDate: data.requested_at,
+                notes: data.notes,
+                approvedBy: data.approver?.name,
+                approvedAt: data.approved_at
+            };
+        } catch (error) {
+            console.error('Error fetching request:', error);
+            throw error;
+        }
     }
 
-    async updateRequestStatus(id, status) {
-        const request = this.requests.find(req => req.id === id);
-        if (request) {
-            request.status = status;
+    async updateRequestStatus(id, status, notes = null) {
+        try {
+            // Extract raw ID
+            const rawId = typeof id === 'string' && id.startsWith('REQ') 
+                ? parseInt(id.replace('REQ', '')) 
+                : id;
+
+            console.log('Updating request - Input ID:', id, 'Raw ID:', rawId, 'Status:', status);
+
+            const updateData = {
+                status: status,
+                approved_by: this.currentUser?.id,
+                approved_at: new Date().toISOString()
+            };
+
+            if (notes) {
+                updateData.notes = notes;
+            }
+
+            console.log('Update data:', updateData);
+
+            // First, get the project_id from the request
+            const { data: existingRequest, error: fetchError } = await supabase
+                .from('resource_requests')
+                .select('project_id, id, status')
+                .eq('id', rawId)
+                .single();
+
+            console.log('Existing request:', existingRequest, 'Fetch error:', fetchError);
+
+            if (fetchError) throw fetchError;
+
+            // Update resource request status
+            const { data: requestData, error: requestError } = await supabase
+                .from('resource_requests')
+                .update(updateData)
+                .eq('id', rawId)
+                .select();
+
+            console.log('Update result:', requestData, 'Update error:', requestError);
+
+            if (requestError) throw requestError;
+
+            // If approved, update project status to 'ongoing'
+            if (status === 'approved' && existingRequest?.project_id) {
+                console.log('Updating project status for project ID:', existingRequest.project_id);
+                
+                const { error: projectError } = await supabase
+                    .from('projects')
+                    .update({ status: 'ongoing' })
+                    .eq('id', existingRequest.project_id);
+
+                if (projectError) {
+                    console.error('Error updating project status:', projectError);
+                    // Don't throw - request was still approved
+                }
+            }
+
+            return { success: true, data: requestData };
+        } catch (error) {
+            console.error('Error updating request status:', error);
+            throw error;
         }
-        return Promise.resolve({ success: true });
+    }
+
+    formatExperienceLevel(level) {
+        const map = {
+            'beginner': 'Junior (1-3 years)',
+            'intermediate': 'Mid-level (3-5 years)',
+            'advanced': 'Senior (5+ years)'
+        };
+        return map[level] || level;
+    }
+
+    calculateDuration(startDate, endDate) {
+        if (!startDate || !endDate) return 'N/A';
+        
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays < 30) {
+            return `${diffDays} days`;
+        } else {
+            const months = Math.round(diffDays / 30);
+            return `${months} month${months > 1 ? 's' : ''}`;
+        }
+    }
+
+    capitalize(str) {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1);
     }
 }
 
@@ -213,11 +347,13 @@ class UIManager {
     constructor() {}
 
     formatDate(dateString) {
+        if (!dateString) return 'N/A';
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     }
 
     capitalize(str) {
+        if (!str) return '';
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
@@ -255,6 +391,7 @@ class UIManager {
         const card = document.createElement('div');
         card.className = 'request-card';
         card.dataset.id = req.id;
+        card.dataset.rawId = req.rawId;
 
         const header = this.createRequestHeader(req);
         card.appendChild(header);
@@ -262,10 +399,9 @@ class UIManager {
         const content = this.createRequestContent(req);
         card.appendChild(content);
 
-        if (req.status === 'pending') {
-            const actions = this.createRequestActions(req);
-            card.appendChild(actions);
-        }
+        // Always show actions - but different for different statuses
+        const actions = this.createRequestActions(req);
+        card.appendChild(actions);
 
         return card;
     }
@@ -380,19 +516,23 @@ class UIManager {
         viewBtn.innerHTML = '<i class="fas fa-eye"></i> View Details';
         viewBtn.onclick = () => window.requestController.viewRequest(req.id);
 
-        const approveBtn = document.createElement('button');
-        approveBtn.className = 'btn-approve';
-        approveBtn.innerHTML = '<i class="fas fa-check"></i> Approve';
-        approveBtn.onclick = () => window.requestController.openApproveModal(req.id);
-
-        const rejectBtn = document.createElement('button');
-        rejectBtn.className = 'btn-reject';
-        rejectBtn.innerHTML = '<i class="fas fa-times"></i> Reject';
-        rejectBtn.onclick = () => window.requestController.openRejectModal(req.id);
-
         actions.appendChild(viewBtn);
-        actions.appendChild(approveBtn);
-        actions.appendChild(rejectBtn);
+
+        // Only show approve/reject for pending requests
+        if (req.status === 'pending') {
+            const approveBtn = document.createElement('button');
+            approveBtn.className = 'btn-approve';
+            approveBtn.innerHTML = '<i class="fas fa-check"></i> Approve';
+            approveBtn.onclick = () => window.requestController.openApproveModal(req.id);
+
+            const rejectBtn = document.createElement('button');
+            rejectBtn.className = 'btn-reject';
+            rejectBtn.innerHTML = '<i class="fas fa-times"></i> Reject';
+            rejectBtn.onclick = () => window.requestController.openRejectModal(req.id);
+
+            actions.appendChild(approveBtn);
+            actions.appendChild(rejectBtn);
+        }
 
         return actions;
     }
@@ -411,8 +551,23 @@ class RequestController {
     }
 
     async initialize() {
-        await this.loadRequests();
+        // Check if user is logged in
+        if (!this.dataService.currentUser) {
+            window.location.href = '../index.html';
+            return;
+        }
+
+        // Check if user is resource manager
+        if (this.dataService.currentUser.role !== 'resource_manager') {
+            MessageManager.error('Access denied. Resource Manager role required.');
+            setTimeout(() => {
+                window.location.href = '../index.html';
+            }, 2000);
+            return;
+        }
+
         this.setupEventListeners();
+        await this.loadRequests();
     }
 
     async loadRequests(filter = '') {
@@ -420,7 +575,12 @@ class RequestController {
             ModalManager.showLoading();
             let requests = await this.dataService.getAllRequests();
 
-            if (filter) {
+            // Only show approved requests if explicitly filtered
+            if (filter === '') {
+                // Default view: Show only pending and rejected (NOT approved)
+                requests = requests.filter(req => req.status !== 'approved');
+            } else if (filter) {
+                // Specific filter selected
                 requests = requests.filter(req => req.status === filter);
             }
 
@@ -485,14 +645,18 @@ class RequestController {
             ModalManager.hide('approveRequestModal');
             ModalManager.showLoading();
 
-            await this.dataService.updateRequestStatus(this.currentRequestId, 'approved');
+            console.log('Approving request ID:', this.currentRequestId);
             
-            MessageManager.success('Request approved successfully');
+            const result = await this.dataService.updateRequestStatus(this.currentRequestId, 'approved');
+            
+            console.log('Approval result:', result);
+            
+            MessageManager.success('Request approved successfully. Project moved to Projects page.');
             await this.loadRequests(this.currentFilter);
             this.currentRequestId = null;
         } catch (error) {
-            MessageManager.error('Failed to approve request');
-            console.error(error);
+            MessageManager.error('Failed to approve request: ' + error.message);
+            console.error('Approval error:', error);
         } finally {
             ModalManager.hideLoading();
         }
@@ -507,7 +671,7 @@ class RequestController {
             ModalManager.hide('rejectRequestModal');
             ModalManager.showLoading();
 
-            await this.dataService.updateRequestStatus(this.currentRequestId, 'rejected');
+            await this.dataService.updateRequestStatus(this.currentRequestId, 'rejected', reason);
             
             MessageManager.success('Request rejected');
             await this.loadRequests(this.currentFilter);
@@ -528,11 +692,12 @@ class RequestController {
         ModalManager.hide('logoutModal');
         ModalManager.showLoading();
         
+        localStorage.removeItem('loggedUser');
+        
         setTimeout(() => {
             ModalManager.hideLoading();
             MessageManager.success('Logged out successfully');
-            // Redirect to login page
-            // window.location.href = 'login.html';
+            window.location.href = '../login.html';
         }, 1000);
     }
 

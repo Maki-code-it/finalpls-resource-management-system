@@ -128,35 +128,48 @@ class DataService {
   
     // Fetch all approved resource requests (linked to projects)
     async getAllProjects() {
+        // Start from resource_requests filtered by approved status
         const { data, error } = await supabase
-          .from('projects')
+          .from('resource_requests')
           .select(`
-            id,
-            name,
-            status,
-            end_date,
-            project_requirements(quantity_needed),
-            resource_requests(status)
+            project:projects(
+              id,
+              name,
+              status,
+              end_date,
+              project_requirements(quantity_needed)
+            )
           `)
-          .eq('resource_requests.status', 'approved');
+          .eq('status', 'approved'); // filter requests at the DB level
       
         if (error) {
           console.error("Error loading projects:", error);
           throw error;
         }
       
-        // Format data for your UI
-        const formatted = (data || []).map(project => ({
-          projectId: project.id,
-          projectName: project.name,
-          projectStatus: project.status,
-          teamSize: (project.project_requirements || [])
-            .reduce((sum, req) => sum + (req.quantity_needed || 0), 0),
-          deadline: project.end_date
-        }));
+        // Extract unique projects and format for UI
+        const projectMap = new Map();
       
-        return formatted;
+        (data || []).forEach(req => {
+          const proj = req.project;
+          if (!projectMap.has(proj.id)) {
+            projectMap.set(proj.id, {
+              projectId: proj.id,
+              projectName: proj.name,
+              projectStatus: proj.status,
+              teamSize: (proj.project_requirements || []).reduce(
+                (sum, r) => sum + (r.quantity_needed || 0),
+                0
+              ),
+              deadline: proj.end_date
+            });
+          }
+        });
+      
+        // Return as array
+        return Array.from(projectMap.values());
       }
+      
       
       
   
