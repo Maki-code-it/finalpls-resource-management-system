@@ -1,4 +1,9 @@
 // ============================================
+// IMPORT SUPABASE CLIENT
+// ============================================
+import { supabase } from '../../supabaseClient.js';
+
+// ============================================
 // UTILITY - Debounce Function
 // ============================================
 function debounce(func, wait) {
@@ -14,159 +19,367 @@ function debounce(func, wait) {
 }
 
 // ============================================
-// DATA SERVICE - Ready for Supabase Integration
+// DATA SERVICE - Supabase Integration
 // ============================================
 class ProfileDataService {
     constructor() {
-        // TODO: Initialize Supabase client here
-        // this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        this.supabase = supabase;
         
-        // Get current user from localStorage (set during login)
-        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        this.currentEmployeeId = userData.id || 'EMP001';
-        this.currentUserName = userData.name || 'John Doe';
+        // Get current user from localStorage (same as dashboard.js)
+        const userData = JSON.parse(localStorage.getItem('loggedUser') || '{}');
+        this.currentUserId = userData.id; // This is the users.id
+        this.currentUserName = userData.name || 'User';
         this.currentUserEmail = userData.email || 'user@company.com';
         
         console.log('Current User Data:', { 
-            id: this.currentEmployeeId, 
+            id: this.currentUserId, 
             name: this.currentUserName,
             email: this.currentUserEmail 
         });
+        
+        if (!this.currentUserId) {
+            console.error('No user ID found in localStorage!');
+            window.location.href = '/login/HTML_Files/login.html';
+        }
     }
 
     // Employee Profile Methods
     async getEmployeeProfile() {
-        // TODO: Replace with Supabase query
-        // const { data, error } = await this.supabase
-        //     .from('user_details')
-        //     .select('*')
-        //     .eq('id', this.currentEmployeeId)
-        //     .single();
-        return this.getMockEmployeeProfile();
+        try {
+            // Fetch user data with user_details
+            const { data: userData, error: userError } = await this.supabase
+                .from('users')
+                .select(`
+                    *,
+                    user_details (*)
+                `)
+                .eq('id', this.currentUserId)
+                .single();
+
+            if (userError) throw userError;
+
+            if (!userData) {
+                throw new Error('User not found');
+            }
+
+            const details = userData.user_details?.[0] || {};
+
+            // Format the profile data
+            const profile = {
+                id: details.employee_id || `EMP${userData.id}`,
+                userId: userData.id,
+                name: userData.name,
+                role: details.job_title || 'Employee',
+                department: details.department || 'Not Assigned',
+                email: userData.email,
+                joinDate: details.join_date ? this.formatDate(details.join_date) : 'N/A',
+                experience: this.getExperienceLabel(details.experience_level),
+                avatar: (details.profile_pic && details.profile_pic.trim() !== '') 
+                    ? details.profile_pic 
+                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name)}&background=4A90E2&color=fff`,
+                skills: this.formatSkills(details.skills),
+                location: details.location || 'Not specified',
+                phone: details.phone_number || 'Not provided',
+                status: details.status || 'Available',
+                uploadedFiles: []
+            };
+
+            // Fetch uploaded files
+            const { data: files, error: filesError } = await this.supabase
+                .from('employee_files')
+                .select('*')
+                .eq('employee_id', details.employee_id || `EMP${userData.id}`)
+                .order('uploaded_at', { ascending: false });
+
+            if (!filesError && files) {
+                profile.uploadedFiles = files.map(f => ({
+                    name: f.filename,
+                    size: 'N/A',
+                    uploadDate: f.uploaded_at
+                }));
+            }
+
+            return profile;
+        } catch (error) {
+            console.error('Error fetching profile:', error);
+            throw error;
+        }
     }
 
     async updateEmployeeProfile(profileData) {
-        // TODO: Replace with Supabase mutation
-        // const { data, error } = await this.supabase
-        //     .from('user_details')
-        //     .update(profileData)
-        //     .eq('id', this.currentEmployeeId);
-        console.log('Profile updated:', profileData);
-        return { success: true };
+        try {
+            const { data, error } = await this.supabase
+                .from('user_details')
+                .update({
+                    job_title: profileData.role,
+                    department: profileData.department,
+                    phone_number: profileData.phone,
+                    location: profileData.location,
+                    status: profileData.status
+                })
+                .eq('user_id', this.currentUserId);
+
+            if (error) throw error;
+
+            console.log('Profile updated successfully');
+            return { success: true };
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            throw error;
+        }
     }
 
     async uploadProfilePicture(file) {
-        // TODO: Replace with Supabase storage upload
-        // Step 1: Upload file to Supabase Storage
-        // const fileExt = file.name.split('.').pop();
-        // const fileName = `${this.currentEmployeeId}-${Date.now()}.${fileExt}`;
-        // const { data: uploadData, error: uploadError } = await this.supabase.storage
-        //     .from('profile-pictures')
-        //     .upload(fileName, file, {
-        //         cacheControl: '3600',
-        //         upsert: true
-        //     });
-        //
-        // if (uploadError) throw uploadError;
-        //
-        // Step 2: Get public URL
-        // const { data: { publicUrl } } = this.supabase.storage
-        //     .from('profile-pictures')
-        //     .getPublicUrl(fileName);
-        //
-        // Step 3: Update user_details table with new profile_pic URL
-        // const { data, error } = await this.supabase
-        //     .from('user_details')
-        //     .update({ profile_pic: publicUrl })
-        //     .eq('id', this.currentEmployeeId);
-        //
-        // if (error) throw error;
-        // return { success: true, url: publicUrl };
+        try {
+            const { data: userDetails, error: detailsError } = await this.supabase
+                .from('user_details')
+                .select('employee_id')
+                .eq('user_id', this.currentUserId)
+                .single();
 
-        // Mock implementation - Create a data URL from the uploaded file
-        console.log('Profile picture uploaded:', file.name);
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Convert file to data URL for preview (temporary until Supabase is connected)
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const dataUrl = e.target.result;
-                console.log('Created data URL for image');
-                resolve({ success: true, url: dataUrl });
-            };
-            reader.onerror = (error) => {
-                console.error('Error reading file:', error);
-                reject(error);
-            };
-            reader.readAsDataURL(file);
-        });
+            if (detailsError) throw detailsError;
+
+            const employeeId = userDetails.employee_id || `EMP${this.currentUserId}`;
+
+            // Upload file to Supabase Storage
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${employeeId}-${Date.now()}.${fileExt}`;
+            
+            const { data: uploadData, error: uploadError } = await this.supabase.storage
+                .from('profile-pictures')
+                .upload(fileName, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                });
+
+            if (uploadError) throw uploadError;
+
+            // Get public URL
+            const { data: { publicUrl } } = this.supabase.storage
+                .from('profile-pictures')
+                .getPublicUrl(fileName);
+
+            // Update user_details table with new profile_pic URL
+            const { error: updateError } = await this.supabase
+                .from('user_details')
+                .update({ profile_pic: publicUrl })
+                .eq('user_id', this.currentUserId);
+
+            if (updateError) throw updateError;
+
+            return { success: true, url: publicUrl };
+        } catch (error) {
+            console.error('Error uploading profile picture:', error);
+            throw error;
+        }
     }
 
     async uploadCV(file) {
-        // TODO: Replace with Supabase storage upload + OCR processing
-        // const { data, error } = await this.supabase.storage
-        //     .from('cvs')
-        //     .upload(`${this.currentEmployeeId}/${file.name}`, file);
-        // Then trigger OCR processing backend function
-        console.log('CV uploaded:', file.name);
-        
-        // Simulate OCR processing delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        return { 
-            success: true, 
-            fileName: file.name, 
-            fileSize: this.formatFileSize(file.size),
-            uploadDate: new Date().toISOString().split('T')[0],
-            skills: ['Python', 'JavaScript', 'React', 'Node.js', 'SQL', 'Docker'] 
-        };
+        try {
+            const { data: userDetails, error: detailsError } = await this.supabase
+                .from('user_details')
+                .select('employee_id')
+                .eq('user_id', this.currentUserId)
+                .single();
+
+            if (detailsError) throw detailsError;
+
+            const employeeId = userDetails.employee_id || `EMP${this.currentUserId}`;
+
+            // Upload file to Supabase Storage
+            const fileName = `${employeeId}/${Date.now()}-${file.name}`;
+            
+            const { data: uploadData, error: uploadError } = await this.supabase.storage
+                .from('cvs')
+                .upload(fileName, file);
+
+            if (uploadError) throw uploadError;
+
+            // Insert record into employee_files table
+            const { data: fileRecord, error: recordError } = await this.supabase
+                .from('employee_files')
+                .insert({
+                    employee_id: employeeId,
+                    filename: file.name
+                })
+                .select()
+                .single();
+
+            if (recordError) throw recordError;
+
+            // Simulate skill extraction (integrate with OCR service later)
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            const mockSkills = ['Python', 'JavaScript', 'React', 'Node.js', 'SQL', 'Docker'];
+
+            return { 
+                success: true, 
+                fileName: file.name, 
+                fileSize: this.formatFileSize(file.size),
+                uploadDate: new Date().toISOString().split('T')[0],
+                skills: mockSkills
+            };
+        } catch (error) {
+            console.error('Error uploading CV:', error);
+            throw error;
+        }
     }
 
     async deleteCV(fileName) {
-        // TODO: Replace with Supabase storage delete
-        // const { data, error } = await this.supabase.storage
-        //     .from('cvs')
-        //     .remove([`${this.currentEmployeeId}/${fileName}`]);
-        console.log('CV deleted:', fileName);
-        return { success: true };
+        try {
+            const { data: userDetails, error: detailsError } = await this.supabase
+                .from('user_details')
+                .select('employee_id')
+                .eq('user_id', this.currentUserId)
+                .single();
+
+            if (detailsError) throw detailsError;
+
+            const employeeId = userDetails.employee_id || `EMP${this.currentUserId}`;
+
+            // Delete from employee_files table
+            const { error: deleteError } = await this.supabase
+                .from('employee_files')
+                .delete()
+                .eq('employee_id', employeeId)
+                .eq('filename', fileName);
+
+            if (deleteError) throw deleteError;
+
+            // Delete from storage
+            const { error: storageError } = await this.supabase.storage
+                .from('cvs')
+                .remove([`${employeeId}/${fileName}`]);
+
+            if (storageError) console.warn('Storage delete warning:', storageError);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error deleting CV:', error);
+            throw error;
+        }
     }
 
     async addSkill(skillData) {
-        // TODO: Replace with Supabase insert
-        // const { data, error } = await this.supabase
-        //     .from('employee_skills')
-        //     .insert({ 
-        //         employee_id: this.currentEmployeeId, 
-        //         skill_name: skillData.name,
-        //         proficiency_level: skillData.level 
-        //     });
-        console.log('Skill added:', skillData);
-        return { success: true };
+        try {
+            const { data: userDetails, error: fetchError } = await this.supabase
+                .from('user_details')
+                .select('skills')
+                .eq('user_id', this.currentUserId)
+                .single();
+
+            if (fetchError) throw fetchError;
+
+            const currentSkills = userDetails.skills || [];
+            const newSkill = `${skillData.name}:${skillData.level}`;
+            
+            if (!currentSkills.includes(newSkill)) {
+                currentSkills.push(newSkill);
+            }
+
+            const { error: updateError } = await this.supabase
+                .from('user_details')
+                .update({ skills: currentSkills })
+                .eq('user_id', this.currentUserId);
+
+            if (updateError) throw updateError;
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error adding skill:', error);
+            throw error;
+        }
     }
 
     async removeSkill(skillName) {
-        // TODO: Replace with Supabase delete
-        // const { data, error } = await this.supabase
-        //     .from('employee_skills')
-        //     .delete()
-        //     .eq('employee_id', this.currentEmployeeId)
-        //     .eq('skill_name', skillName);
-        console.log('Skill removed:', skillName);
-        return { success: true };
+        try {
+            const { data: userDetails, error: fetchError } = await this.supabase
+                .from('user_details')
+                .select('skills')
+                .eq('user_id', this.currentUserId)
+                .single();
+
+            if (fetchError) throw fetchError;
+
+            const currentSkills = userDetails.skills || [];
+            const updatedSkills = currentSkills.filter(skill => 
+                !skill.toLowerCase().startsWith(skillName.toLowerCase() + ':')
+            );
+
+            const { error: updateError } = await this.supabase
+                .from('user_details')
+                .update({ skills: updatedSkills })
+                .eq('user_id', this.currentUserId);
+
+            if (updateError) throw updateError;
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error removing skill:', error);
+            throw error;
+        }
     }
 
     async updateExperience(experienceData) {
-        // TODO: Replace with Supabase update
-        // const { data, error } = await this.supabase
-        //     .from('user_details')
-        //     .update({ 
-        //         experience: experienceData.experience,
-        //         role: experienceData.role 
-        //     })
-        //     .eq('id', this.currentEmployeeId);
-        console.log('Experience updated:', experienceData);
-        return { success: true };
+        try {
+            const experienceLevel = this.getExperienceLevel(experienceData.experience);
+
+            const { error } = await this.supabase
+                .from('user_details')
+                .update({ 
+                    experience_level: experienceLevel,
+                    job_title: experienceData.role 
+                })
+                .eq('user_id', this.currentUserId);
+
+            if (error) throw error;
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error updating experience:', error);
+            throw error;
+        }
+    }
+
+    // Helper Methods
+    formatSkills(skillsArray) {
+        if (!skillsArray || skillsArray.length === 0) {
+            return [];
+        }
+
+        return skillsArray.map(skill => {
+            const [name, level] = skill.split(':');
+            return {
+                name: name || skill,
+                level: level || 'Intermediate'
+            };
+        });
+    }
+
+    getExperienceLabel(experienceLevel) {
+        const mapping = {
+            'beginner': '0-2 years',
+            'intermediate': '3-5 years',
+            'advanced': '5+ years'
+        };
+        return mapping[experienceLevel] || 'Not specified';
+    }
+
+    getExperienceLevel(experienceText) {
+        const years = parseInt(experienceText);
+        if (isNaN(years)) {
+            if (experienceText.includes('0-2') || experienceText.includes('beginner')) return 'beginner';
+            if (experienceText.includes('3-5') || experienceText.includes('intermediate')) return 'intermediate';
+            return 'advanced';
+        }
+        if (years <= 2) return 'beginner';
+        if (years <= 5) return 'intermediate';
+        return 'advanced';
+    }
+
+    formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
     }
 
     formatFileSize(bytes) {
@@ -175,39 +388,6 @@ class ProfileDataService {
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-    }
-
-    // Mock Data Methods (Remove these when integrating with Supabase)
-    getMockEmployeeProfile() {
-        // Get user data from localStorage
-        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        
-        // Use actual user data or fallback to mock
-        const userName = userData.name || 'John Doe';
-        const userEmail = userData.email || 'john.doe@company.com';
-        const userId = userData.id || 'EMP001';
-        
-        return {
-            id: userId,
-            name: userName,
-            role: userData.role || 'Senior Developer',
-            department: userData.department || 'Engineering',
-            email: userEmail,
-            joinDate: userData.joinDate || 'Jan 2020',
-            experience: userData.experience || '5 years',
-            avatar: userData.profile_pic || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=4A90E2&color=fff`,
-            skills: [
-                { name: 'Python', level: 'Expert' },
-                { name: 'JavaScript', level: 'Expert' },
-                { name: 'React', level: 'Advanced' },
-                { name: 'Node.js', level: 'Advanced' },
-                { name: 'SQL', level: 'Intermediate' },
-                { name: 'Docker', level: 'Intermediate' }
-            ],
-            uploadedFiles: [
-                { name: 'Resume_2024.pdf', size: '245 KB', uploadDate: '2024-10-15' }
-            ]
-        };
     }
 }
 
@@ -275,7 +455,6 @@ class ProfileUIManager {
     }
 
     updateAllAvatars(avatarUrl) {
-        // Update all avatar instances on the page
         const profileAvatar = document.getElementById('profileAvatar');
         const headerAvatar = document.getElementById('headerAvatar');
         
@@ -286,7 +465,6 @@ class ProfileUIManager {
     renderProfile(profile) {
         this.currentProfile = profile;
         
-        // Update profile header
         const profileName = document.getElementById('profileName');
         const profileRole = document.getElementById('profileRole');
         const profileId = document.getElementById('profileId');
@@ -307,10 +485,7 @@ class ProfileUIManager {
         if (currentPosition) currentPosition.textContent = profile.role;
         if (joinDate) joinDate.textContent = profile.joinDate;
 
-        // Render skills
         this.renderSkills(profile.skills);
-
-        // Render uploaded files
         this.renderUploadedFiles(profile.uploadedFiles);
     }
 
@@ -413,46 +588,27 @@ class ProfileApp {
     }
 
     setupEventListeners() {
-        // Profile Picture Change Event
         this.setupProfilePictureEvents();
-
-        // CV Upload Events
         this.setupCVUploadEvents();
-
-        // Skill Management Events
         this.setupSkillEvents();
-
-        // Experience Events
         this.setupExperienceEvents();
-
-        // Profile Update
         this.setupProfileUpdateEvents();
-
-        // Logout
         this.setupLogoutEvent();
     }
 
     setupProfilePictureEvents() {
         const changeAvatarBtn = document.getElementById('changeAvatarBtn');
         
-        console.log('Setting up profile picture events...', changeAvatarBtn);
-        
         if (changeAvatarBtn) {
-            console.log('Change Avatar button found, adding event listener');
             changeAvatarBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Change Photo button clicked!');
                 this.changeProfilePicture();
             });
-        } else {
-            console.error('Change Avatar button NOT found!');
         }
     }
 
     async changeProfilePicture() {
-        console.log('changeProfilePicture method called!');
-        
         let selectedFile = null;
         
         const result = await Swal.fire({
@@ -494,8 +650,7 @@ class ProfileApp {
                 fileInput.addEventListener('change', (e) => {
                     const file = e.target.files[0];
                     if (file) {
-                        // Validate file
-                        const maxSize = 2 * 1024 * 1024; // 2MB
+                        const maxSize = 2 * 1024 * 1024;
                         const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
                         
                         if (file.size > maxSize) {
@@ -510,11 +665,9 @@ class ProfileApp {
                             return;
                         }
                         
-                        // Store the file
                         selectedFile = file;
                         selectedFileName.textContent = `Selected: ${file.name}`;
                         
-                        // Show preview
                         const reader = new FileReader();
                         reader.onload = (e) => {
                             previewImage.src = e.target.result;
@@ -533,22 +686,12 @@ class ProfileApp {
         });
 
         if (result.isConfirmed && result.value) {
-            const file = result.value;
-            console.log('File to upload:', file);
-            
             try {
                 this.uiManager.showLoading('Uploading profile picture...');
-                const uploadResult = await this.dataService.uploadProfilePicture(file);
-                
-                console.log('Upload result:', uploadResult);
+                const uploadResult = await this.dataService.uploadProfilePicture(result.value);
                 
                 if (uploadResult.success) {
-                    // Update current profile
                     this.currentProfile.avatar = uploadResult.url;
-                    
-                    console.log('New avatar URL:', uploadResult.url);
-                    
-                    // Update all avatar instances on the page
                     this.uiManager.updateAllAvatars(uploadResult.url);
                     this.uiManager.updateHeaderInfo(this.currentProfile);
                     
@@ -569,14 +712,12 @@ class ProfileApp {
         const browseBtn = document.getElementById('browseBtn');
 
         if (cvUploadArea && cvFileInput) {
-            // Click to upload
             cvUploadArea.addEventListener('click', (e) => {
                 if (e.target !== browseBtn && !browseBtn.contains(e.target)) {
                     cvFileInput.click();
                 }
             });
 
-            // Drag and drop
             cvUploadArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 cvUploadArea.classList.add('drag-over');
@@ -595,7 +736,6 @@ class ProfileApp {
                 }
             });
 
-            // File input change
             cvFileInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
                     this.handleCVUpload(e.target.files[0]);
@@ -654,8 +794,7 @@ class ProfileApp {
     }
 
     async handleCVUpload(file) {
-        // Validate file
-        const maxSize = 5 * 1024 * 1024; // 5MB
+        const maxSize = 5 * 1024 * 1024;
         const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
         
         if (file.size > maxSize) {
@@ -674,14 +813,12 @@ class ProfileApp {
             this.uiManager.hideLoading();
             
             if (result.success) {
-                // Add file to uploaded files list
                 this.currentProfile.uploadedFiles.push({
                     name: result.fileName,
                     size: result.fileSize,
                     uploadDate: result.uploadDate
                 });
 
-                // Show success with extracted skills
                 await Swal.fire({
                     icon: 'success',
                     title: 'CV Uploaded Successfully!',
@@ -705,17 +842,14 @@ class ProfileApp {
                     showCancelButton: true,
                     cancelButtonText: 'Add Skills to Profile',
                     cancelButtonColor: '#4A90E2'
-                }).then(async (result) => {
-                    if (result.isDismissed) {
-                        // Add extracted skills to profile
+                }).then(async (swalResult) => {
+                    if (swalResult.isDismissed) {
                         await this.addExtractedSkills(result.skills);
                     }
                 });
                 
-                // Refresh uploaded files list
                 this.uiManager.renderUploadedFiles(this.currentProfile.uploadedFiles);
                 
-                // Clear file input
                 const cvFileInput = document.getElementById('cvFileInput');
                 if (cvFileInput) cvFileInput.value = '';
             }
@@ -730,13 +864,11 @@ class ProfileApp {
         try {
             this.uiManager.showLoading('Adding skills to your profile...');
             
-            // Filter out skills that already exist
             const existingSkillNames = this.currentProfile.skills.map(s => s.name.toLowerCase());
             const newSkills = skills.filter(skill => 
                 !existingSkillNames.includes(skill.toLowerCase())
             );
 
-            // Add new skills with intermediate level by default
             for (const skillName of newSkills) {
                 const skillData = { name: skillName, level: 'Intermediate' };
                 await this.dataService.addSkill(skillData);
@@ -789,7 +921,6 @@ class ProfileApp {
                     return false;
                 }
 
-                // Check if skill already exists
                 const existingSkill = profileApp.currentProfile.skills.find(
                     s => s.name.toLowerCase() === skillName.toLowerCase()
                 );
@@ -934,7 +1065,6 @@ class ProfileApp {
             cancelButtonColor: '#4A90E2'
         }).then((result) => {
             if (result.isDismissed) {
-                // TODO: Implement download functionality
                 this.uiManager.showSuccess('Download functionality will be available soon');
             }
         });
@@ -973,11 +1103,14 @@ class ProfileApp {
         if (confirmed) {
             this.uiManager.showLoading('Logging out...');
             
-            // TODO: Add Supabase logout here
-            // await this.dataService.supabase.auth.signOut();
+            // Clear localStorage
+            localStorage.removeItem('userData');
+            
+            // Sign out from Supabase
+            await this.dataService.supabase.auth.signOut();
             
             setTimeout(() => {
-                window.location.href = "/login/HTML_Files/login.html"; // Redirect to login page
+                window.location.href = "/login/HTML_Files/login.html";
             }, 1000);
         }
     }
@@ -988,7 +1121,6 @@ class ProfileApp {
 // ============================================
 let profileApp;
 
-// Make profileApp globally accessible
 window.profileApp = null;
 
 document.addEventListener('DOMContentLoaded', () => {
