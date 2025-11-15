@@ -18,59 +18,70 @@ function debounce(func, wait) {
 // ============================================
 class ProfileDataService {
     constructor() {
-       
-       this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        this.currentEmployeeId = 'EMP001'; // Mock current user
+        // TODO: Initialize Supabase client here
+        // this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Get current user from localStorage (set during login)
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        this.currentEmployeeId = userData.id || 'EMP001';
+        this.currentUserName = userData.name || 'John Doe';
+        this.currentUserEmail = userData.email || 'user@company.com';
+        
+        console.log('Current User Data:', { 
+            id: this.currentEmployeeId, 
+            name: this.currentUserName,
+            email: this.currentUserEmail 
+        });
     }
 
     // Employee Profile Methods
     async getEmployeeProfile() {
-    
-        const { data, error } = await this.supabase
-            .from('user_details')
-            .select('*')
-            .eq('id', this.currentEmployeeId)
-            .single();
+        // TODO: Replace with Supabase query
+        // const { data, error } = await this.supabase
+        //     .from('user_details')
+        //     .select('*')
+        //     .eq('id', this.currentEmployeeId)
+        //     .single();
         return this.getMockEmployeeProfile();
     }
 
     async updateEmployeeProfile(profileData) {
-    
-      const { data, error } = await this.supabase
-           .from('user_details')
-            .update(profileData)
-           .eq('id', this.currentEmployeeId);
+        // TODO: Replace with Supabase mutation
+        // const { data, error } = await this.supabase
+        //     .from('user_details')
+        //     .update(profileData)
+        //     .eq('id', this.currentEmployeeId);
         console.log('Profile updated:', profileData);
         return { success: true };
     }
 
     async uploadProfilePicture(file) {
-     
+        // TODO: Replace with Supabase storage upload
         // Step 1: Upload file to Supabase Storage
-     const fileExt = file.name.split('.').pop();
-      const fileName = `${this.currentEmployeeId}-${Date.now()}.${fileExt}`;
-    const { data: uploadData, error: uploadError } = await this.supabase.storage
-           .from('profile-pictures')
-             .upload(fileName, file, {
-               cacheControl: '3600',
-               upsert: true
-          });
-     
-       if (uploadError) throw uploadError;
-    
-    
-      const { data: { publicUrl } } = this.supabase.storage
-          .from('profile-pictures')
-           .getPublicUrl(fileName);
-      
-  
-        const { data, error } = await this.supabase
-            .from('user_details')
-          .update({ profile_pic: publicUrl })
-           .eq('id', this.currentEmployeeId);
-      
-     if (error) throw error;
-        return { success: true, url: publicUrl };
+        // const fileExt = file.name.split('.').pop();
+        // const fileName = `${this.currentEmployeeId}-${Date.now()}.${fileExt}`;
+        // const { data: uploadData, error: uploadError } = await this.supabase.storage
+        //     .from('profile-pictures')
+        //     .upload(fileName, file, {
+        //         cacheControl: '3600',
+        //         upsert: true
+        //     });
+        //
+        // if (uploadError) throw uploadError;
+        //
+        // Step 2: Get public URL
+        // const { data: { publicUrl } } = this.supabase.storage
+        //     .from('profile-pictures')
+        //     .getPublicUrl(fileName);
+        //
+        // Step 3: Update user_details table with new profile_pic URL
+        // const { data, error } = await this.supabase
+        //     .from('user_details')
+        //     .update({ profile_pic: publicUrl })
+        //     .eq('id', this.currentEmployeeId);
+        //
+        // if (error) throw error;
+        // return { success: true, url: publicUrl };
 
         // Mock implementation - Create a data URL from the uploaded file
         console.log('Profile picture uploaded:', file.name);
@@ -168,15 +179,23 @@ class ProfileDataService {
 
     // Mock Data Methods (Remove these when integrating with Supabase)
     getMockEmployeeProfile() {
+        // Get user data from localStorage
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        
+        // Use actual user data or fallback to mock
+        const userName = userData.name || 'John Doe';
+        const userEmail = userData.email || 'john.doe@company.com';
+        const userId = userData.id || 'EMP001';
+        
         return {
-            id: 'EMP001',
-            name: 'John Doe',
-            role: 'Senior Developer',
-            department: 'Engineering',
-            email: 'john.doe@company.com',
-            joinDate: 'Jan 2020',
-            experience: '5 years',
-            avatar: 'https://ui-avatars.com/api/?name=John+Doe&background=4A90E2&color=fff',
+            id: userId,
+            name: userName,
+            role: userData.role || 'Senior Developer',
+            department: userData.department || 'Engineering',
+            email: userEmail,
+            joinDate: userData.joinDate || 'Jan 2020',
+            experience: userData.experience || '5 years',
+            avatar: userData.profile_pic || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=4A90E2&color=fff`,
             skills: [
                 { name: 'Python', level: 'Expert' },
                 { name: 'JavaScript', level: 'Expert' },
