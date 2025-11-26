@@ -116,7 +116,14 @@ class SuperAdminApp {
 
         tbody.innerHTML = this.organizations.map(org => `
             <tr>
-                <td><strong>${org.name}</strong></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <img src="${org.logo || 'https://via.placeholder.com/40x40?text=No+Logo'}" 
+                             alt="${org.name}" 
+                             style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px; border: 1px solid #DEE2E6;">
+                        <strong>${org.name}</strong>
+                    </div>
+                </td>
                 <td>${org.industry}</td>
                 <td>${org.users}</td>
                 <td><span class="status-badge status-${org.status}">${org.status.charAt(0).toUpperCase() + org.status.slice(1)}</span></td>
@@ -160,7 +167,14 @@ class SuperAdminApp {
                 <tbody>
                     ${recent.map(org => `
                         <tr>
-                            <td><strong>${org.name}</strong></td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <img src="${org.logo || 'https://via.placeholder.com/32x32?text=No+Logo'}" 
+                                         alt="${org.name}" 
+                                         style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; border: 1px solid #DEE2E6;">
+                                    <strong>${org.name}</strong>
+                                </div>
+                            </td>
                             <td>${org.industry}</td>
                             <td>${org.users}</td>
                             <td><span class="status-badge status-${org.status}">${org.status.charAt(0).toUpperCase() + org.status.slice(1)}</span></td>
@@ -197,6 +211,21 @@ class SuperAdminApp {
                     </div>
                     
                     <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Organization Logo:</label>
+                        <div style="text-align: center; margin-bottom: 12px;">
+                            <img id="logoPreview" src="https://via.placeholder.com/150x150?text=No+Logo" 
+                                 style="width: 150px; height: 150px; object-fit: contain; border: 2px solid #DEE2E6; border-radius: 8px; margin-bottom: 12px;">
+                        </div>
+                        <input type="file" id="orgLogo" accept="image/png,image/jpeg,image/jpg" 
+                               style="display: none;">
+                        <button type="button" onclick="document.getElementById('orgLogo').click()" 
+                                style="padding: 8px 16px; background-color: #4A90E2; color: white; border: none; border-radius: 6px; cursor: pointer; width: 90%;">
+                            <i class="fas fa-upload"></i> Upload Logo
+                        </button>
+                        <small style="display: block; margin-top: 8px; color: #6C757D; font-size: 12px;">Recommended: 200x200px, PNG or JPG, Max 2MB</small>
+                    </div>
+                    
+                    <div style="margin-bottom: 16px;">
                         <label style="display: block; margin-bottom: 8px; font-weight: 600;">Initial Admin Email:</label>
                         <input id="orgEmail" type="email" class="swal2-input" placeholder="admin@organization.com" style="width: 90%; margin: 0;">
                     </div>
@@ -208,10 +237,44 @@ class SuperAdminApp {
             confirmButtonColor: '#000000',
             cancelButtonColor: '#6C757D',
             confirmButtonText: 'Create Organization',
+            didOpen: () => {
+                const logoInput = document.getElementById('orgLogo');
+                const logoPreview = document.getElementById('logoPreview');
+                
+                logoInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        // Validate file
+                        const maxSize = 2 * 1024 * 1024; // 2MB
+                        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+                        
+                        if (file.size > maxSize) {
+                            Swal.showValidationMessage('Logo file size exceeds 2MB limit');
+                            logoInput.value = '';
+                            return;
+                        }
+                        
+                        if (!allowedTypes.includes(file.type)) {
+                            Swal.showValidationMessage('Only JPG and PNG files are allowed');
+                            logoInput.value = '';
+                            return;
+                        }
+                        
+                        // Show preview
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            logoPreview.src = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            },
             preConfirm: () => {
                 const orgName = document.getElementById('orgName').value.trim();
                 const orgIndustry = document.getElementById('orgIndustry').value;
                 const orgEmail = document.getElementById('orgEmail').value.trim();
+                const logoFile = document.getElementById('orgLogo').files[0];
+                const logoPreview = document.getElementById('logoPreview').src;
                 
                 if (!orgName) {
                     Swal.showValidationMessage('Please enter organization name');
@@ -226,18 +289,43 @@ class SuperAdminApp {
                     return false;
                 }
                 
-                return { name: orgName, industry: orgIndustry, email: orgEmail };
+                return { 
+                    name: orgName, 
+                    industry: orgIndustry, 
+                    email: orgEmail,
+                    logo: logoFile ? logoPreview : 'https://via.placeholder.com/150x150?text=No+Logo'
+                };
             }
         });
 
         if (formValues) {
             // TODO: Replace with Supabase insert
+            // Step 1: Upload logo to Supabase Storage
+            // const logoFile = document.getElementById('orgLogo').files[0];
+            // let logoUrl = null;
+            // if (logoFile) {
+            //     const fileExt = logoFile.name.split('.').pop();
+            //     const fileName = `org-${Date.now()}.${fileExt}`;
+            //     const { data: uploadData, error: uploadError } = await supabase.storage
+            //         .from('organization-logos')
+            //         .upload(fileName, logoFile);
+            //     
+            //     if (!uploadError) {
+            //         const { data: { publicUrl } } = supabase.storage
+            //             .from('organization-logos')
+            //             .getPublicUrl(fileName);
+            //         logoUrl = publicUrl;
+            //     }
+            // }
+            //
+            // Step 2: Insert organization with logo URL
             // const { data, error } = await supabase
             //     .from('organizations')
             //     .insert({
             //         name: formValues.name,
             //         industry: formValues.industry,
             //         admin_email: formValues.email,
+            //         logo_url: logoUrl,
             //         status: 'active'
             //     });
 
@@ -247,6 +335,7 @@ class SuperAdminApp {
                 industry: formValues.industry,
                 users: 0,
                 status: 'active',
+                logo: formValues.logo,
                 createdDate: new Date().toISOString().split('T')[0]
             };
 
@@ -288,32 +377,111 @@ class SuperAdminApp {
                             <option value="Other" ${org.industry === 'Other' ? 'selected' : ''}>Other</option>
                         </select>
                     </div>
+                    
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600;">Organization Logo:</label>
+                        <div style="text-align: center; margin-bottom: 12px;">
+                            <img id="logoPreview" src="${org.logo || 'https://via.placeholder.com/150x150?text=No+Logo'}" 
+                                 style="width: 150px; height: 150px; object-fit: contain; border: 2px solid #DEE2E6; border-radius: 8px; margin-bottom: 12px;">
+                        </div>
+                        <input type="file" id="orgLogo" accept="image/png,image/jpeg,image/jpg" 
+                               style="display: none;">
+                        <button type="button" onclick="document.getElementById('orgLogo').click()" 
+                                style="padding: 8px 16px; background-color: #4A90E2; color: white; border: none; border-radius: 6px; cursor: pointer; width: 90%; margin-bottom: 8px;">
+                            <i class="fas fa-upload"></i> Change Logo
+                        </button>
+                        <button type="button" id="removeLogo" 
+                                style="padding: 8px 16px; background-color: #D0021B; color: white; border: none; border-radius: 6px; cursor: pointer; width: 90%;">
+                            <i class="fas fa-trash"></i> Remove Logo
+                        </button>
+                        <small style="display: block; margin-top: 8px; color: #6C757D; font-size: 12px;">Recommended: 200x200px, PNG or JPG, Max 2MB</small>
+                    </div>
                 </div>
             `,
             width: 600,
             showCancelButton: true,
             confirmButtonColor: '#000000',
             confirmButtonText: 'Save Changes',
+            didOpen: () => {
+                const logoInput = document.getElementById('orgLogo');
+                const logoPreview = document.getElementById('logoPreview');
+                const removeLogoBtn = document.getElementById('removeLogo');
+                
+                logoInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        // Validate file
+                        const maxSize = 2 * 1024 * 1024; // 2MB
+                        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+                        
+                        if (file.size > maxSize) {
+                            Swal.showValidationMessage('Logo file size exceeds 2MB limit');
+                            logoInput.value = '';
+                            return;
+                        }
+                        
+                        if (!allowedTypes.includes(file.type)) {
+                            Swal.showValidationMessage('Only JPG and PNG files are allowed');
+                            logoInput.value = '';
+                            return;
+                        }
+                        
+                        // Show preview
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            logoPreview.src = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+                
+                removeLogoBtn.addEventListener('click', () => {
+                    logoPreview.src = 'https://via.placeholder.com/150x150?text=No+Logo';
+                    logoInput.value = '';
+                });
+            },
             preConfirm: () => {
+                const logoPreview = document.getElementById('logoPreview').src;
                 return {
                     name: document.getElementById('orgName').value.trim(),
-                    industry: document.getElementById('orgIndustry').value
+                    industry: document.getElementById('orgIndustry').value,
+                    logo: logoPreview
                 };
             }
         });
 
         if (formValues) {
             // TODO: Update in Supabase
+            // Step 1: If logo changed, upload to Supabase Storage
+            // const logoFile = document.getElementById('orgLogo').files[0];
+            // if (logoFile) {
+            //     const fileExt = logoFile.name.split('.').pop();
+            //     const fileName = `org-${id}-${Date.now()}.${fileExt}`;
+            //     const { data: uploadData, error: uploadError } = await supabase.storage
+            //         .from('organization-logos')
+            //         .upload(fileName, logoFile, { upsert: true });
+            //     
+            //     if (!uploadError) {
+            //         const { data: { publicUrl } } = supabase.storage
+            //             .from('organization-logos')
+            //             .getPublicUrl(fileName);
+            //         formValues.logo = publicUrl;
+            //     }
+            // }
+            //
+            // Step 2: Update organization
             // const { data, error } = await supabase
             //     .from('organizations')
             //     .update({
             //         name: formValues.name,
-            //         industry: formValues.industry
+            //         industry: formValues.industry,
+            //         logo_url: formValues.logo
             //     })
             //     .eq('id', id);
 
             org.name = formValues.name;
             org.industry = formValues.industry;
+            org.logo = formValues.logo;
             this.renderOrganizationsTable();
             this.renderRecentOrganizations();
 
