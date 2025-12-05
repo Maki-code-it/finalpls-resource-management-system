@@ -19,8 +19,8 @@ from PyPDF2 import PdfReader
 import gc
 
 # ---------- CONFIG ----------
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-POPPLER_PATH = r"C:\poppler-24.08.0\Library\bin"
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+POPPLER_PATH = "/usr/bin"  # for poppler utils
 
 # ---------- OPTIMIZATION CONFIG ----------
 PROCESSING_CONFIG = {
