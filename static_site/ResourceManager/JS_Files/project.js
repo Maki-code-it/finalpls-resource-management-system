@@ -1,7 +1,7 @@
 // OPTIMIZED RESOURCE MANAGEMENT (RM) project.js
 
 // ---------- Imports ----------
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 import bcrypt from "https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/+esm";
 
 // ============================================

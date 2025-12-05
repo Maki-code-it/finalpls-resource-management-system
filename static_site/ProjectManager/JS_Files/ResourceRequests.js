@@ -1,5 +1,5 @@
 // PROJECT MANAGER (PM) Resource Requests.js - OPTIMIZED
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 
 // ============================================
 // USER NAME DISPLAY UTILITY

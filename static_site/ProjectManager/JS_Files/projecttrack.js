@@ -1,5 +1,5 @@
 // PROJECT MANAGER (PM) projecttrack.js - OPTIMIZED
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 
 // ============================================
 // MODAL UTILITIES

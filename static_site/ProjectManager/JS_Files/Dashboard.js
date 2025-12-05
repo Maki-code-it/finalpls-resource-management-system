@@ -1,7 +1,7 @@
 // PROJECT MANAGER (PM) Dashboard - Optimized
 // - Same functionality & output as original, but cleaner, DRY-er, and more performant
 
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 import { allocateHoursModal } from "./Dashboard-modal.js";
 
 /* ======================================================================

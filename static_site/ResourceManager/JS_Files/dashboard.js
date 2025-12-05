@@ -1,5 +1,5 @@
 // RESOURCE MANAGEMENT (RM) dashboard.js - OPTIMIZED
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 
 // ============================================
 // CONFIGURATION & CONSTANTS

@@ -1,7 +1,7 @@
 // newproject-modal (Optimized)
 // Same behavior & output as original, but refactored for readability, performance, and maintainability.
 
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 
 /* ---------- Small DOM helpers ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);

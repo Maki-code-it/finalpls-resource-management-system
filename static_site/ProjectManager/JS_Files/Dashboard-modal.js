@@ -1,6 +1,6 @@
 // OPTIMIZED Dashboard-modal.js
 
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 
 // ============================================
 // CONSTANTS & CONFIGURATION

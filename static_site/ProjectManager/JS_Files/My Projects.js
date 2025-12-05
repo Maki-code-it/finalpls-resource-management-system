@@ -1,7 +1,7 @@
 // My Projects (Optimized)
 // Purpose: Same functionality and output as original but cleaner, DRYer, and more maintainable.
 
-import { supabase } from "../../supabaseClient.js";
+import { supabase } from "/supabaseClient.js";
 
 /* ==========================
    Small DOM helpers
