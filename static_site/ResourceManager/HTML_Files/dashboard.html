@@ -1,0 +1,227 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resource Manager Dashboard</title>
+    <link rel="stylesheet" href="/static/ResourceManager/CSS_Files/dashboard.css">
+    <link rel="stylesheet" href="/static/ResourceManager/CSS_Files/dashboard-modals.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-users-cog"></i>
+                <span>RM System</span>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <a href="../HTML_Files/dashboard.html" class="nav-item active">
+                <i class="fas fa-chart-line"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="../HTML_Files/employee.html" class="nav-item">
+                <i class="fas fa-user-friends"></i>
+                <span>Employee Directory</span>
+            </a>
+            <a href="../HTML_Files/project.html" class="nav-item">
+                <i class="fas fa-project-diagram"></i>
+                <span>Projects</span>
+            </a>
+            <a href="../HTML_Files/request.html" class="nav-item">
+                <i class="fas fa-inbox"></i>
+                <span>Requests</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button class="logout-btn" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="top-header">
+            <div class="header-left">
+                <h1>Capacity & Productivity Overview</h1>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <img src="https://ui-avatars.com/api/?name=Resource+Manager&background=000&color=fff" alt="User" class="user-avatar">
+                        <span class="user-name" id="userName">Project Manager</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Content -->
+        <div class="page-content">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalEmployees">0</h3>
+                        <p>Total Employees</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon purple">
+                        <i class="fas fa-project-diagram"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalProjects">0</h3>
+                        <p>Active Projects</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">
+                        <i class="fas fa-user-check"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="availableEmployees">0</h3>
+                        <p>Available (0-4h)</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange">
+                        <i class="fas fa-user-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="partialEmployees">0</h3>
+                        <p>Partial (4-7h)</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon red">
+                        <i class="fas fa-briefcase"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="fullyAllocated">0</h3>
+                        <p>Fully Allocated (8h)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capacity Timeline View -->
+            <div class="capacity-timeline-container">
+                <div class="timeline-header">
+                    <h2>Project Timeline & Team Workload</h2>
+                    <div class="timeline-controls">
+                        <!-- Filter Buttons -->
+                        <div class="time-filter">
+                            <button class="filter-btn active" data-period="today">Today</button>
+                            <button class="filter-btn" data-period="week">This Week</button>
+                        </div>
+                        
+                        <!-- Date Filter -->
+                        <div class="date-filter-wrapper">
+                            <label for="dateFilter">Select Date:</label>
+                            <input type="date" id="dateFilter" />
+                        </div>
+                        
+                        <!-- Search Box -->
+                        <div class="search-wrapper">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="employeeSearch" placeholder="Search project, team member, or PM..." />
+                        </div>
+                        
+                        <!-- Legend -->
+                        <div class="legend">
+                            <span class="legend-item"><span class="legend-color available"></span> Available (0-4h)</span>
+                            <span class="legend-item"><span class="legend-color partial"></span> Partial (4-7h)</span>
+                            <span class="legend-item"><span class="legend-color full"></span> Full (8h)</span>
+                            <span class="legend-item"><span class="legend-color over"></span> Overtime (8h+)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Grid -->
+                <div class="timeline-grid">
+                    <!-- Timeline Dates Header -->
+                    <div class="timeline-dates" id="timelineDates">
+                        <!-- Dates will be loaded here -->
+                    </div>
+
+                    <!-- Project Timeline Rows -->
+                    <div class="timeline-rows" id="timelineRows">
+                        <!-- Project rows will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- LOADING OVERLAY -->
+    <div class="modal-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- LOGOUT CONFIRMATION MODAL -->
+    <div class="modal-overlay" id="logoutModal">
+        <div class="modal-box modal-box-small">
+            <div class="modal-header">
+                <h2>Confirm Logout</h2>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to logout?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" id="cancelLogout">Cancel</button>
+                <button type="button" class="btn-danger" id="confirmLogout">Yes, Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WORKLOG DETAILS MODAL -->
+<div class="modal-overlay" id="worklogModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2>Work Log Details</h2>
+            <button class="modal-close" id="closeWorklogModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="worklog-info">
+                <div class="worklog-meta">
+                    <div class="worklog-meta-item">
+                        <i class="fas fa-user"></i>
+                        <strong>Employee:</strong>
+                        <span id="worklogEmployeeName">-</span>
+                    </div>
+                    <div class="worklog-meta-item">
+                        <i class="fas fa-calendar"></i>
+                        <strong>Date:</strong>
+                        <span id="worklogDate">-</span>
+                    </div>
+                    <div class="worklog-meta-item">
+                        <i class="fas fa-project-diagram"></i>
+                        <strong>Project:</strong>
+                        <span id="worklogProjectName">-</span>
+                    </div>
+                </div>
+                
+                <div id="worklogList" class="worklog-entries">
+                    <!-- Worklogs will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <script type="module" src="/static/ResourceManager/JS_Files/dashboard.js"></script>
+</body>
+</html
