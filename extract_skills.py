@@ -412,12 +412,21 @@ async def process_single_file_fixed(file: UploadFile):
 
         elif suffix in [".png", ".jpg", ".jpeg"]:
             logger.info(f"Handling image file: {file.filename}")
-            img = Image.open(BytesIO(content))
+
+            # IMPORTANT: Convert to RGB always
+            img = Image.open(BytesIO(content)).convert("RGB")
+
+            # OCR in thread to avoid blocking
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 text = await asyncio.get_event_loop().run_in_executor(
                     executor, 
-                    lambda: pytesseract.image_to_string(img, config='--psm 6')
+                    lambda: pytesseract.image_to_string(
+                        img,
+                        lang="eng",
+                        config="--psm 6 -c preserve_interword_spaces=1"
+                    )
                 )
+
             logger.debug(f"Image OCR text length: {len(text)}")
 
         else:
