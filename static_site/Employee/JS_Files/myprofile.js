@@ -903,10 +903,11 @@ class ProfileApp {
             uploadFormData.append('employee_id', employeeId);
             files.forEach(file => uploadFormData.append('files', file));
     
-            const uploadPromise = fetch('http://127.0.0.1:8000/upload_cv/', {
+            const uploadPromise = fetch('https://finalpls-resource-management-system.onrender.com/upload_cv/', {
                 method: 'POST',
                 body: uploadFormData
             });
+            
             
             // Start skill extraction in parallel but don't wait for it
             const skillPromise = this.extractSkillsParallel(files, employeeId);
@@ -950,10 +951,11 @@ class ProfileApp {
             files.forEach(file => skillFormData.append('files', file));
             skillFormData.append('employee_number', employeeId);
     
-            const skillResponse = await fetch('http://127.0.0.1:8000/extract_skills/', {
+            const skillResponse = await fetch('https://finalpls-resource-management-system.onrender.com/extract_skills/', {
                 method: 'POST',
                 body: skillFormData
             });
+            
             
             if (!skillResponse.ok) return [];
             

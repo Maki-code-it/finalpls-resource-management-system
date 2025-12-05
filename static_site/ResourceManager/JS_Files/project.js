@@ -681,17 +681,16 @@ class ProjectApp {
             let recommendationsFailed = false;
             
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), CONFIG.API_TIMEOUT);
-                
-                const res = await fetch(`${CONFIG.API_BASE_URL}/recommendations/${projectId}`, {
+                const res = await fetch(`https://finalpls-resource-management-system.onrender.com/recommendations/${projectId}`, {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
                     },
-                    signal: controller.signal
+                    body: JSON.stringify({})
                 });
+                
+                
                 
                 clearTimeout(timeoutId);
                 
