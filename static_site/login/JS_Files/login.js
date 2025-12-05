@@ -91,13 +91,14 @@ form.addEventListener("submit", async (e) => {
   }));
 
   setTimeout(() => {
-  if (user.role === "project_manager") {
-    window.location.href = "../../ProjectManager/HTML_Files/Dashboard.html";
-  } else if (user.role === "resource_manager") {
-    window.location.href = "/ResourceManager/HTML_Files/dashboard.html";
-  } else if (user.role === "employee") {
-    window.location.href = "../../Employee/HTML_Files/dashboard.html";
-  }
-}, 1200);
+    if (user.role === "project_manager") {
+      window.location.href = "/ProjectManager/HTML_Files/Dashboard.html";
+    } else if (user.role === "resource_manager") {
+      window.location.href = "/ResourceManager/HTML_Files/dashboard.html";
+    } else if (user.role === "employee") {
+      window.location.href = "/Employee/HTML_Files/dashboard.html";
+    }
+  }, 1200);
+  
 
 });
