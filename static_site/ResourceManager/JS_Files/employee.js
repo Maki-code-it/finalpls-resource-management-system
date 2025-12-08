@@ -1054,10 +1054,29 @@ class EmployeeApp {
 // ============================================
 // INITIALIZATION
 // ============================================
+// ============================================
+// INITIALIZATION - COMPLETE FIX
+// ============================================
 let app;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('[INIT] Initializing Employee App...');
-    app = new EmployeeApp();
-    app.init();
+    
+    try {
+        // Initialize the app
+        app = new EmployeeApp();
+        
+        // CRITICAL: Make app globally available BEFORE initializing
+        window.app = app;
+        
+        // Now initialize
+        await app.init();
+        
+        console.log('[INIT] App initialized successfully');
+        console.log('[DEBUG] window.app:', !!window.app);
+        console.log('[DEBUG] viewEmployee method:', typeof window.app.viewEmployee);
+    } catch (error) {
+        console.error('[INIT] Failed to initialize app:', error);
+        MessageManager.error('Failed to load application. Please refresh.');
+    }
 });
